@@ -142,3 +142,130 @@ function genId(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
 }
 
+// =============================================================
+//  글자 단위 서식(리치 텍스트) 공용 헬퍼
+//  - 필드의 표시 텍스트를 "글자 조각(run)" 배열로 다룬다.
+//  - run = { t:"글자", color?, bold?, size?(배율) }
+//  - f.runs 가 없으면 f.label + 필드레벨 서식(f.color/size/bold)으로 동작(하위호환)
+//  화면(app.js)·편집기(admin.js)·PDF(pdf.js) 가 공통으로 사용한다.
+// =============================================================
+
+// 표시 텍스트의 기본 글자 크기(px) — 화면/편집기 미리보기 공통
+function fieldTextBasePx(f) {
+  if (f.type === "section") return 19;
+  if (f.type === "note") return 15;
+  return 18; // 항목 이름(라벨)
+}
+
+// 필드의 글자 조각 배열. runs 없으면 label 전체를 한 조각으로.
+function fieldRuns(f) {
+  if (f && Array.isArray(f.runs) && f.runs.length) return f.runs;
+  return [{ t: (f && f.label) || "" }];
+}
+
+// 조각들의 텍스트를 이어붙임 (f.label 동기화용)
+function runsToText(runs) {
+  return (runs || []).map((r) => r.t || "").join("");
+}
+
+// 한 조각의 최종 스타일 (run 우선 → 필드레벨 → 기본)
+function runStyle(r, f) {
+  const size = r.size != null ? r.size : (f.size != null ? f.size : 1);
+  const color = r.color != null ? r.color : (f.color != null ? f.color : "");
+  const boldDefault = f.type === "section";   // 구역 제목은 기본 굵게
+  const bold = r.bold != null ? r.bold : (f.bold != null ? f.bold : boldDefault);
+  return { size: size || 1, color, bold, px: Math.round(fieldTextBasePx(f) * (size || 1)) };
+}
+
+// 화면/미리보기용 HTML (span 들). 정렬은 바깥 요소에서 처리.
+// 서식이 지정되지 않은 부분은 CSS 기본값(라벨 600 / 구역제목 700 등)을 그대로 쓰도록
+// 굳이 스타일을 넣지 않는다.
+function runsToHtml(runs, f) {
+  return (runs || []).map((r) => {
+    const styles = [];
+    const color = r.color != null ? r.color : (f.color != null ? f.color : "");
+    if (color) styles.push("color:" + color);
+    const size = r.size != null ? r.size : (f.size != null ? f.size : 1);
+    if (size !== 1) styles.push("font-size:" + Math.round(fieldTextBasePx(f) * size) + "px");
+    const bold = r.bold != null ? r.bold : (f.bold != null ? f.bold : null);
+    if (bold != null) styles.push("font-weight:" + (bold ? "700" : "400"));
+    const text = escHtml(r.t || "").replace(/\n/g, "<br>");
+    return `<span${styles.length ? ` style="${styles.join(";")}"` : ""}>${text}</span>`;
+  }).join("");
+}
+
+// "rgb(r, g, b)" 또는 "#rrggbb" → "#rrggbb"
+function rgbToHex(c) {
+  if (!c) return "";
+  if (c[0] === "#") return c.length === 7 ? c : "";
+  const m = String(c).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!m) return "";
+  const h = (n) => Number(n).toString(16).padStart(2, "0");
+  return "#" + h(m[1]) + h(m[2]) + h(m[3]);
+}
+
+// 인접한 동일 스타일 조각 병합 + 기본값 속성 제거
+function normalizeRuns(runs) {
+  const out = [];
+  (runs || []).forEach((r) => {
+    const last = out[out.length - 1];
+    if (last && (last.color || "") === (r.color || "") && (last.size || 1) === (r.size || 1) && (!!last.bold) === (!!r.bold)) last.t += (r.t || "");
+    else out.push(Object.assign({}, r));
+  });
+  out.forEach((r) => { if (r.size == null || r.size === 1) delete r.size; if (!r.color) delete r.color; if (r.bold == null) delete r.bold; });
+  return out.length ? out : [{ t: "" }];
+}
+
+// contentEditable DOM → runs 로 정규화 (인접 동일 스타일 병합)
+function domToRuns(el, f) {
+  const base = fieldTextBasePx(f);
+  const runs = [];
+  const styleFromEl = (node) => {
+    const s = node.style || {};
+    const out = {};
+    const col = rgbToHex(s.color);
+    if (col) out.color = col;
+    if (s.fontSize) { const px = parseFloat(s.fontSize); if (px) { const m = Math.round((px / base) * 100) / 100; if (m !== 1) out.size = m; } }
+    if (s.fontWeight) { const w = s.fontWeight; out.bold = (w === "bold" || Number(w) >= 600); }
+    return out;
+  };
+  const push = (t, st) => { if (t !== "") runs.push(Object.assign({ t }, st)); };
+  const addNL = () => { const last = runs[runs.length - 1]; if (last && last.t.slice(-1) !== "\n") last.t += "\n"; };
+  const walk = (node, inherited) => {
+    node.childNodes.forEach((c) => {
+      if (c.nodeType === 3) push(c.nodeValue, inherited);
+      else if (c.nodeName === "BR") addNL();
+      else if (c.nodeType === 1) {
+        if (/^(DIV|P)$/.test(c.nodeName)) addNL();
+        walk(c, Object.assign({}, inherited, styleFromEl(c)));
+      }
+    });
+  };
+  walk(el, {});
+  return normalizeRuns(runs);
+}
+
+// runs 의 [start,end) 글자 구간에 서식(attr) 적용. value==null 이면 해제.
+// 선택이 없으면(start===end) 전체에 적용. attr: "color" | "size" | "bold"
+function runsSetAttr(runs, start, end, attr, value) {
+  const chars = [];
+  (runs || []).forEach((r) => {
+    const st = { color: r.color, size: r.size, bold: r.bold };
+    const t = r.t || "";
+    for (let i = 0; i < t.length; i++) chars.push({ ch: t[i], st: Object.assign({}, st) });
+  });
+  if (start === end) { start = 0; end = chars.length; }
+  for (let i = start; i < end && i < chars.length; i++) {
+    if (value == null) delete chars[i].st[attr];
+    else chars[i].st[attr] = value;
+  }
+  const out = [];
+  chars.forEach((c) => {
+    const last = out[out.length - 1];
+    const same = last && (last.color || "") === (c.st.color || "") && (last.size || 1) === (c.st.size || 1) && (!!last.bold) === (!!c.st.bold);
+    if (same) last.t += c.ch;
+    else out.push(Object.assign({ t: c.ch }, c.st));
+  });
+  return normalizeRuns(out);
+}
+

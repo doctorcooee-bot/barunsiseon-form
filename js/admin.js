@@ -401,19 +401,115 @@ function screenEditForm(formObj, isNew) {
   drawEditor();
 }
 
-// 미리보기 글씨에 서식(정렬·색상·굵기·크기) 적용 — app.js 의 실제 화면과 동일
-function efBasePx(f) {
-  if (f.type === "section") return 19;
-  if (f.type === "note") return 15;
-  return 18;
+// 정렬(문장 전체 공통)을 텍스트 블록(라벨/구역제목/안내문구)에 적용.
+// 색·크기·굵게는 글자 단위(run)로 runsToHtml 이 span 에 직접 넣으므로 여기서 다루지 않는다.
+function efApplyAlign(f, i) {
+  const el = document.querySelector(`.wys-field[data-i="${i}"] .wys-text`);
+  if (el && el.parentElement) el.parentElement.style.textAlign = f.align || "";
 }
-function styleWysText(el, f) {
-  el.style.textAlign = f.align || "";
-  el.style.color = f.color || "";
-  el.style.fontSize = (f.size && f.size !== 1) ? Math.round(efBasePx(f) * f.size) + "px" : "";
-  el.style.fontWeight = f.bold === true ? "700" : (f.bold === false ? "400" : "");
+
+// 편집기 리치텍스트 선택영역 추적 (색/크기/굵게 버튼이 포커스를 가져가도 유지)
+let efLastSel = null;   // { i, start, end }
+
+// 현재 선택된 항목의 편집 가능한 텍스트 스팬
+function efCurrentEditable() {
+  if (efSel < 0) return null;
+  return document.querySelector(`.wys-field[data-i="${efSel}"] .wys-text`);
 }
-function efBoldOn(f) { return f.bold != null ? f.bold : (f.type === "section"); }
+// 노드의 글자 길이 (텍스트=길이, <br>=1)
+function efNodeLen(node) {
+  if (node.nodeType === 3) return node.nodeValue.length;
+  if (node.nodeName === "BR") return 1;
+  let n = 0; node.childNodes.forEach((c) => { n += efNodeLen(c); }); return n;
+}
+// (컨테이너,오프셋) → 편집영역 내 글자 오프셋
+function efNodeOffset(el, container, offset) {
+  let count = 0, done = false;
+  const walk = (node) => {
+    if (done) return;
+    if (node === container) {
+      if (node.nodeType === 3) count += offset;
+      else for (let k = 0; k < offset; k++) count += efNodeLen(node.childNodes[k]);
+      done = true; return;
+    }
+    if (node.nodeType === 3) { count += node.nodeValue.length; return; }
+    if (node.nodeName === "BR") { count += 1; return; }
+    node.childNodes.forEach(walk);
+  };
+  walk(el);
+  return count;
+}
+// 현재 선택영역의 글자 오프셋 {start,end}
+function efSelOffsets(el) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const r = sel.getRangeAt(0);
+  if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return null;
+  const s = efNodeOffset(el, r.startContainer, r.startOffset);
+  const e = efNodeOffset(el, r.endContainer, r.endOffset);
+  return { start: Math.min(s, e), end: Math.max(s, e) };
+}
+// 글자 오프셋 [start,end] 로 선택영역 복원
+function efSetSelection(el, start, end) {
+  const locate = (target) => {
+    let count = 0, res = null;
+    const walk = (node) => {
+      if (res) return;
+      if (node.nodeType === 3) {
+        const len = node.nodeValue.length;
+        if (target <= count + len) { res = { node, offset: target - count }; return; }
+        count += len;
+      } else if (node.nodeName === "BR") {
+        const p = node.parentNode, idx = Array.prototype.indexOf.call(p.childNodes, node);
+        if (target <= count) { res = { node: p, offset: idx }; return; }
+        count += 1;
+      } else node.childNodes.forEach(walk);
+    };
+    walk(el);
+    return res || { node: el, offset: el.childNodes.length };
+  };
+  const a = locate(start), b = locate(end);
+  const range = document.createRange();
+  range.setStart(a.node, a.offset);
+  range.setEnd(b.node, b.offset);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+// 현재 선택(또는 첫 조각) 대표 스타일
+function efSelStyle() {
+  const f = editingForm.fields[efSel];
+  if (!f) return null;
+  const el = efCurrentEditable();
+  const runs = el ? domToRuns(el, f) : fieldRuns(f);
+  let idx = 0;
+  const off = el ? efSelOffsets(el) : null;
+  if (off && off.end > off.start) idx = off.start;
+  else if (efLastSel && efLastSel.i === efSel && efLastSel.end > efLastSel.start) idx = efLastSel.start;
+  let acc = 0, target = runs[0];
+  for (const r of runs) { const len = (r.t || "").length; target = r; if (idx < acc + len) break; acc += len; }
+  return runStyle(target || { t: "" }, f);
+}
+// 선택영역(없으면 전체)에 색/크기/굵게 적용
+function efApplyRunFmt(attr, value) {
+  const el = efCurrentEditable();
+  const f = editingForm.fields[efSel];
+  if (!el || !f) return;
+  el.focus();
+  let off = efSelOffsets(el);
+  if ((!off || off.start === off.end) && efLastSel && efLastSel.i === efSel) off = { start: efLastSel.start, end: efLastSel.end };
+  if (!off) off = { start: 0, end: 0 };
+  const runs = domToRuns(el, f);
+  const newRuns = runsSetAttr(runs, off.start, off.end, attr, value);
+  f.runs = newRuns;
+  f.label = runsToText(newRuns);
+  el.innerHTML = runsToHtml(newRuns, f);
+  const total = f.label.length;
+  const sel = (off.start === off.end) ? { start: 0, end: total } : off;
+  efSetSelection(el, sel.start, sel.end);
+  efLastSel = { i: efSel, start: sel.start, end: sel.end };
+  efSyncToolbar();
+}
 
 function drawEditor() {
   setStep(editingIsNew ? "새 서류" : "서류 편집");
@@ -534,12 +630,17 @@ function renderEfPreview() {
   editingForm.fields.forEach((f, i) => wrap.appendChild(efFieldBlock(f, i)));
 }
 
+// 편집 가능한 리치텍스트 스팬 (글자 단위 색·크기·굵게)
+function efEditableHtml(f) {
+  return `<span class="wys-text" contenteditable="true" spellcheck="false">${runsToHtml(fieldRuns(f), f)}</span>`;
+}
 // 실제 화면(미리보기)처럼 보이는 항목 본문 HTML
 function efBodyHtml(f) {
   const req = f.required ? '<span class="req">*</span>' : "";
-  if (f.type === "section") return `<div class="section-head wys-text">${escHtml(f.label || "구역 제목")}</div>`;
-  if (f.type === "note") return `<div class="note-text wys-text">${escHtml(f.label || "안내 문구")}</div>`;
-  const label = `<label class="field-label wys-text">${escHtml(f.label || "항목 이름")}${req}</label>`;
+  const ed = efEditableHtml(f);
+  if (f.type === "section") return `<div class="section-head">${ed}</div>`;
+  if (f.type === "note") return `<div class="note-text">${ed}</div>`;
+  const label = `<label class="field-label">${ed}${req}</label>`;
   if (f.type === "write") return `${label}<div class="wys-box">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
   if (f.type === "writeBig") return `${label}<div class="wys-box tall">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
   if (f.type === "number") return `${label}<div class="wys-box">${escHtml(f.format ? "표시형식: " + f.format : "숫자 입력 (표시형식 미지정)")}</div>`;
@@ -571,8 +672,6 @@ function efFieldBlock(f, i) {
   const body = document.createElement("div");
   body.className = "wys-body";
   body.innerHTML = efBodyHtml(f);
-  const txt = body.querySelector(".wys-text");
-  if (txt) styleWysText(txt, f);
 
   const settings = efSettingsPanel(f, i);
   settings.classList.add("hidden");
@@ -581,9 +680,33 @@ function efFieldBlock(f, i) {
   block.appendChild(body);
   block.appendChild(settings);
 
-  // 본문 클릭 → 선택 (도구/설정 영역 제외)
+  // 리치텍스트 편집영역: 정렬 적용 + 입력/선택 연결
+  const edit = body.querySelector(".wys-text");
+  if (edit) {
+    if (edit.parentElement) edit.parentElement.style.textAlign = f.align || "";
+    const track = () => {
+      const o = efSelOffsets(edit);
+      if (o) { efSel = i; efLastSel = { i, start: o.start, end: o.end }; efSyncToolbar(); }
+    };
+    edit.addEventListener("focus", () => efSelect(i));
+    edit.addEventListener("keyup", track);
+    edit.addEventListener("mouseup", track);
+    edit.addEventListener("input", () => {
+      f.runs = domToRuns(edit, f);
+      f.label = runsToText(f.runs);
+      efSyncToolbar();
+    });
+    edit.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (f.type === "note") document.execCommand("insertLineBreak");
+      }
+    });
+  }
+
+  // 본문 클릭 → 선택 (도구/설정/편집영역 제외)
   block.addEventListener("click", (e) => {
-    if (e.target.closest(".wys-tools") || e.target.closest(".wys-settings")) return;
+    if (e.target.closest(".wys-tools") || e.target.closest(".wys-settings") || e.target.closest(".wys-text")) return;
     efSelect(i);
   });
 
@@ -630,8 +753,7 @@ function efSettingsPanel(f, i) {
     <select class="s-type box-input">
       ${FIELD_TYPES.map((t) => `<option value="${t.v}" ${t.v === f.type ? "selected" : ""}>${t.t}</option>`).join("")}
     </select>
-    <label class="wys-set-label">${isText ? "내용" : "항목 이름"}</label>
-    <textarea class="s-label box-input" rows="1">${escHtml(f.label || "")}</textarea>
+    <p class="wys-set-hint">${isText ? "내용" : "항목 이름"}은 위 미리보기에서 직접 입력하세요. 글자를 선택한 뒤 상단 메뉴로 색·크기·굵게를 글자별로 지정할 수 있습니다.</p>
     <div class="s-opt-wrap ${isChoice ? "" : "hidden"}">
       <label class="wys-set-label">선택지 (한 줄에 하나씩)</label>
       <textarea class="s-options box-textarea">${escHtml((f.options || []).join("\n"))}</textarea>
@@ -658,20 +780,7 @@ function efSettingsPanel(f, i) {
     efSyncToolbar();
   });
 
-  // 이름/내용 (실시간, 미리보기 글씨만 갱신)
-  const labelEl = panel.querySelector(".s-label");
-  const grow = () => { labelEl.style.height = "auto"; labelEl.style.height = labelEl.scrollHeight + "px"; };
-  labelEl.addEventListener("input", () => {
-    f.label = labelEl.value;
-    const t = document.querySelector(`.wys-field[data-i="${i}"] .wys-body .wys-text`);
-    if (t) {
-      const reqSpan = t.querySelector(".req");
-      t.textContent = f.label || "";
-      if (reqSpan) t.appendChild(reqSpan);
-    }
-    grow();
-  });
-  setTimeout(grow, 0);
+  // 이름/내용은 미리보기(contenteditable)에서 직접 편집한다.
 
   // 선택지 (실시간, 선택지 목록만 갱신)
   const optEl = panel.querySelector(".s-options");
@@ -726,57 +835,46 @@ function efSelect(i) {
   efSyncToolbar();
 }
 
-// 선택된 항목에 현재 서식을 즉시 반영
-function applyFmtLive() {
-  const f = editingForm.fields[efSel];
-  if (!f) return;
-  const t = document.querySelector(`.wys-field[data-i="${efSel}"] .wys-text`);
-  if (t) styleWysText(t, f);
-}
-
-// 글씨 크기 조절 (0.6~2.0)
+// 글씨 크기 조절 (0.6~2.0) — 선택한 글자(없으면 문장 전체)에 적용
 function efBumpSize(d) {
-  const f = editingForm.fields[efSel];
-  if (!f) return;
-  let s = Math.round(((f.size || 1) + d) * 10) / 10;
+  const st = efSelStyle();
+  if (!st) return;
+  let s = Math.round(((st.size || 1) + d) * 10) / 10;
   s = Math.max(0.6, Math.min(2, s));
-  if (s === 1) delete f.size; else f.size = s;
-  applyFmtLive();
-  efSyncToolbar();
+  efApplyRunFmt("size", s);   // s===1 이면 기본 크기로 되돌아감(정규화 시 제거)
 }
 
 // 상단 서식 메뉴 동작 연결
 function wireEfToolbar() {
   const tb = document.getElementById("ef-toolbar");
+  // 버튼 클릭이 편집영역의 선택을 잃지 않도록 mousedown 기본동작 차단
+  tb.querySelectorAll(".ft-align, .ft-btn").forEach((b) => {
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+  });
   tb.querySelectorAll(".ft-align").forEach((b) => {
     b.addEventListener("click", () => {
       const f = editingForm.fields[efSel]; if (!f) return;
       f.align = b.dataset.align;
-      applyFmtLive(); efSyncToolbar();
+      efApplyAlign(f, efSel); efSyncToolbar();
     });
   });
   document.getElementById("ft-bold").addEventListener("click", () => {
-    const f = editingForm.fields[efSel]; if (!f) return;
-    f.bold = !efBoldOn(f);
-    applyFmtLive(); efSyncToolbar();
+    const st = efSelStyle(); if (!st) return;
+    efApplyRunFmt("bold", !st.bold);
   });
   document.getElementById("ft-size-dn").addEventListener("click", () => efBumpSize(-0.1));
   document.getElementById("ft-size-up").addEventListener("click", () => efBumpSize(0.1));
   const ci = document.getElementById("ft-color-input");
   ci.addEventListener("input", () => {
-    const f = editingForm.fields[efSel]; if (!f) return;
-    f.color = ci.value;
     document.getElementById("ft-color-dot").style.background = ci.value;
-    applyFmtLive();
+    efApplyRunFmt("color", ci.value);
   });
   document.getElementById("ft-color-reset").addEventListener("click", () => {
-    const f = editingForm.fields[efSel]; if (!f) return;
-    delete f.color;
-    applyFmtLive(); efSyncToolbar();
+    efApplyRunFmt("color", null);
   });
 }
 
-// 상단 메뉴 상태를 선택된 항목에 맞게 갱신
+// 상단 메뉴 상태를 선택된 항목(또는 선택한 글자)에 맞게 갱신
 function efSyncToolbar() {
   const controls = document.getElementById("ft-controls");
   const selLabel = document.getElementById("ft-sel");
@@ -793,16 +891,23 @@ function efSyncToolbar() {
   selLabel.textContent = `선택: ${typeName(f.type)}${name ? " · " + shortName : ""}`;
   const align = f.align || "left";
   document.querySelectorAll(".ft-align").forEach((b) => b.classList.toggle("on", b.dataset.align === align));
-  document.getElementById("ft-bold").classList.toggle("on", efBoldOn(f));
-  document.getElementById("ft-size-val").textContent = Math.round((f.size || 1) * 100) + "%";
-  document.getElementById("ft-color-dot").style.background = f.color || "#5f7481";
-  document.getElementById("ft-color-input").value = f.color || "#5f7481";
+  const st = efSelStyle() || runStyle(fieldRuns(f)[0], f);
+  document.getElementById("ft-bold").classList.toggle("on", !!st.bold);
+  document.getElementById("ft-size-val").textContent = Math.round((st.size || 1) * 100) + "%";
+  document.getElementById("ft-color-dot").style.background = st.color || "#5f7481";
+  document.getElementById("ft-color-input").value = st.color || "#5f7481";
 }
 
 function saveEditor() {
   const nameEl = document.getElementById("ef-name");
   editingForm.name = (nameEl.value || "").trim();
-  editingForm.fields.forEach((f) => { f.label = (f.label || "").trim(); });
+  // runs → label 동기화. 서식이 없는(플레인) 텍스트면 runs 를 없애 데이터를 단순화.
+  editingForm.fields.forEach((f) => {
+    const runs = normalizeRuns(fieldRuns(f));
+    f.label = runsToText(runs).trim();
+    const plain = runs.length === 1 && runs[0].color == null && runs[0].size == null && runs[0].bold == null;
+    if (plain) delete f.runs; else f.runs = runs;
+  });
   if (!editingForm.name) return alert("서류 이름을 입력하세요.");
   if (editingForm.fields.length === 0) return alert("항목을 최소 하나 이상 추가하세요.");
   // 선택 항목인데 선택지가 없으면 경고

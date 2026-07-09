@@ -238,18 +238,10 @@ function screenPatientName() {
   scrollTop();
 }
 
-// 항목 글씨의 서식(정렬·색상·굵기·크기)을 화면 요소에 적용 (모든 글씨 공통)
-function fieldBasePx(f) {
-  if (f.type === "section") return 19;
-  if (f.type === "note") return 15;
-  return 18;   // 항목 이름(라벨)
-}
+// 정렬(문장 전체 공통)만 요소에 적용. 색·크기·굵게는 글자 단위(run)로
+// runsToHtml 이 span 에 직접 넣는다.
 function applyFieldTextStyle(el, f) {
   if (f.align) el.style.textAlign = f.align;
-  if (f.color) el.style.color = f.color;
-  if (f.size && f.size !== 1) el.style.fontSize = Math.round(fieldBasePx(f) * f.size) + "px";
-  if (f.bold === true) el.style.fontWeight = "700";
-  else if (f.bold === false) el.style.fontWeight = "400";
 }
 
 // -------------------------------------------------------------
@@ -282,7 +274,7 @@ function screenFill() {
     if (f.type === "section" || f.type === "note") {
       const el = document.createElement("div");
       el.className = f.type === "section" ? "section-head" : "note-text";
-      el.textContent = f.label;
+      el.innerHTML = runsToHtml(fieldRuns(f), f);
       applyFieldTextStyle(el, f);
       card.appendChild(el);
       return;
@@ -291,7 +283,7 @@ function screenFill() {
     const field = document.createElement("div");
     field.className = "field";
     const req = f.required ? '<span class="req">*</span>' : "";
-    const labelHtml = `<label class="field-label">${f.label}${req}</label>`;
+    const labelHtml = `<label class="field-label">${runsToHtml(fieldRuns(f), f)}${req}</label>`;
 
     if (f.type === "write" || f.type === "writeBig" || f.type === "signature" || f.type === "number") {
       field.innerHTML = labelHtml;

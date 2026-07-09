@@ -411,6 +411,14 @@ html, body {
 }
 .wys-tools button[data-act="del"] { color: var(--danger); }
 .wys-body { pointer-events: none; }
+/* 편집 가능한 리치텍스트: 클릭·선택·타이핑 허용, 공백/줄바꿈 보존 */
+.wys-body .wys-text {
+  pointer-events: auto; display: inline-block; min-width: 8px;
+  white-space: pre-wrap; word-break: break-word; outline: none;
+  border-radius: 4px; cursor: text;
+}
+.wys-body .wys-text:focus { box-shadow: 0 0 0 2px rgba(63,124,151,.35); background: #fbfdfe; }
+.wys-settings .wys-set-hint { font-size: 13px; color: var(--text-soft); margin: 2px 0 4px; line-height: 1.5; }
 .wys-box {
   min-height: 46px; border: 1px solid var(--line); border-radius: 10px;
   background: #fbfdfe; color: var(--text-soft); font-size: 14px;

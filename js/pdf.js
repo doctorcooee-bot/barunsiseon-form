@@ -93,6 +93,64 @@ function ensureSpace(ctx, need) {
   }
 }
 
+// 글자 단위 서식(runs)을 폭에 맞춰 줄바꿈하며 그린다.
+//  - runs: [{ t, color?, bold?, size?(배율) }]
+//  - basePt: 기준 글자 크기(pt). run.size 는 이 값에 곱해지는 배율.
+//  - defColor / defBold : run 에 값이 없을 때의 기본 색·굵기
+//  - x0 / maxW : 시작 x, 최대 폭. align 은 줄 단위 정렬.
+//  - 반환 { top } : 첫 줄 baseline 위 boxTop (필기 마크 배치용)
+function drawRichText(ctx, runs, opts) {
+  const { font } = ctx;
+  const basePt = opts.basePt, x0 = opts.x0, maxW = opts.maxW;
+  const align = opts.align || "left";
+  const lineGap = opts.lineGap != null ? opts.lineGap : 4;
+  const defColor = opts.defColor, defBold = !!opts.defBold;
+  const defSize = opts.defSize || 1;
+  // runs → 글자 단위 배열 (각 글자의 크기·색·굵기 확정)
+  const chars = [];
+  (runs || []).forEach((r) => {
+    const pt = basePt * (r.size != null ? r.size : defSize);
+    const color = (r.color && /^#?[0-9a-fA-F]{6}$/.test(r.color)) ? hexToPdfColor(r.color, defColor) : defColor;
+    const bold = r.bold != null ? r.bold : defBold;
+    for (const ch of (r.t || "")) chars.push({ ch, pt, color, bold });
+  });
+  // 폭에 맞춰 줄로 나눔 (\n 은 강제 줄바꿈)
+  const lines = [];
+  let line = [], w = 0;
+  const pushLine = () => { lines.push(line); line = []; w = 0; };
+  chars.forEach((c) => {
+    if (c.ch === "\n") { pushLine(); return; }
+    const cw = font.widthOfTextAtSize(c.ch, c.pt);
+    if (line.length && w + cw > maxW) pushLine();
+    line.push(c); w += cw;
+  });
+  pushLine();
+  const top = ctx.y + basePt;
+  lines.forEach((ln) => {
+    const maxPt = ln.reduce((m, c) => Math.max(m, c.pt), basePt);
+    const lh = maxPt + lineGap;
+    ensureSpace(ctx, lh);
+    let lineW = 0; ln.forEach((c) => { lineW += font.widthOfTextAtSize(c.ch, c.pt); });
+    let x = x0;
+    if (align === "center") x = x0 + (maxW - lineW) / 2;
+    else if (align === "right") x = x0 + (maxW - lineW);
+    // 연속으로 같은 스타일이면 묶어서 한 번에 그림
+    let i = 0;
+    while (i < ln.length) {
+      let j = i + 1;
+      while (j < ln.length && ln[j].pt === ln[i].pt && ln[j].bold === ln[i].bold && ln[j].color === ln[i].color) j++;
+      const text = ln.slice(i, j).map((c) => c.ch).join("");
+      const seg = ln[i];
+      if (seg.bold) drawBold(ctx.page, text, x, ctx.y, { size: seg.pt, font, color: seg.color });
+      else ctx.page.drawText(text, { x, y: ctx.y, size: seg.pt, font, color: seg.color });
+      x += font.widthOfTextAtSize(text, seg.pt);
+      i = j;
+    }
+    ctx.y -= lh;
+  });
+  return { top };
+}
+
 // 새 PDF 문서 + 한글 폰트 준비 (같은 세션에서 여러 번 만들어도 안전)
 async function newPdfDoc() {
   const { PDFDocument } = PDFLib;
@@ -163,18 +221,16 @@ async function drawFormBody(ctx, form, values, meta, C) {
   const size = sz.base;
   const RIGHT = PAGE_W - MARGIN;
 
-  // 항목 라벨 (윗줄) — 항목별 서식(정렬·굵기·색상·크기) 반영
+  // 항목 라벨 (윗줄) — 글자 단위 서식(색·크기·굵기) + 정렬(문장 전체) 반영
   function drawLabel(f) {
-    const lsize = sz.label * (f.size || 1);
-    const step = lsize + 4.5;
-    const color = hexToPdfColor(f.color, C.gray);
-    const bold = !!f.bold;
-    const align = f.align || "left";
-    ensureSpace(ctx, step + 2);
-    const tx = align === "left" ? MARGIN : alignedX(font.widthOfTextAtSize(f.label, lsize), align);
-    if (bold) drawBold(ctx.page, f.label, tx, ctx.y, { size: lsize, font, color });
-    else ctx.page.drawText(f.label, { x: tx, y: ctx.y, size: lsize, font, color });
-    ctx.y -= step;
+    ensureSpace(ctx, sz.label + 6);
+    drawRichText(ctx, fieldRuns(f), {
+      basePt: sz.label, defSize: f.size || 1,
+      defColor: hexToPdfColor(f.color, C.gray),
+      defBold: !!f.bold,
+      x0: MARGIN, maxW: CONTENT_W,
+      align: f.align || "left", lineGap: 4.5,
+    });
   }
   // 항목 구분선
   function sep() {
@@ -269,37 +325,33 @@ async function drawFormBody(ctx, form, values, meta, C) {
       const align = f.align || "left";
       const bold = f.bold !== false;   // 구역 제목은 기본 굵게
       // 좌측 정렬일 때만 브랜드 색 세로 막대 표시
-      let tx = MARGIN;
+      let x0 = MARGIN, maxW = CONTENT_W;
       if (align === "left") {
         ctx.page.drawRectangle({ x: MARGIN, y: ctx.y - 2, width: 4, height: 13, color: secColor });
-        tx = MARGIN + 10;
-      } else {
-        const lineW = font.widthOfTextAtSize(f.label, secSize);
-        tx = alignedX(lineW, align);
+        x0 = MARGIN + 10; maxW = CONTENT_W - 10;
       }
-      const boxTop = ctx.y + secSize;
-      if (bold) drawBold(ctx.page, f.label, tx, ctx.y, { size: secSize, font, color: secColor });
-      else ctx.page.drawText(f.label, { x: tx, y: ctx.y, size: secSize, font, color: secColor });
-      drawMarksFor(ctx, values, fi, boxTop, ctx.y - secSize * 0.28);
-      ctx.y -= sz.sectionGap;
+      const yBefore = ctx.y;
+      const r = drawRichText(ctx, fieldRuns(f), {
+        basePt: secSize, defSize: f.size || 1,
+        defColor: secColor, defBold: bold,
+        x0, maxW, align, lineGap: 4,
+      });
+      drawMarksFor(ctx, values, fi, r.top, yBefore - secSize * 0.28);
+      ctx.y -= (sz.sectionGap - (secSize + 4));
       continue;
     }
     if (f.type === "note") {
       const nSize = Math.max(9, sz.base - 1);
-      const nLineH = nSize + 4;
       const nColor = hexToPdfColor(f.color, C.gray);
       const align = f.align || "left";
       const bold = !!f.bold;
       ctx.y -= 2;
-      const boxTop = ctx.y + nSize;
-      wrapText(f.label, font, nSize, CONTENT_W).forEach((ln) => {
-        ensureSpace(ctx, nLineH);
-        const tx = align === "left" ? MARGIN : alignedX(font.widthOfTextAtSize(ln, nSize), align);
-        if (bold) drawBold(ctx.page, ln, tx, ctx.y, { size: nSize, font, color: nColor });
-        else ctx.page.drawText(ln, { x: tx, y: ctx.y, size: nSize, font, color: nColor });
-        ctx.y -= nLineH;
+      const r = drawRichText(ctx, fieldRuns(f), {
+        basePt: nSize, defSize: f.size || 1,
+        defColor: nColor, defBold: bold,
+        x0: MARGIN, maxW: CONTENT_W, align, lineGap: 4,
       });
-      drawMarksFor(ctx, values, fi, boxTop, ctx.y + nLineH - nSize * 0.28);
+      drawMarksFor(ctx, values, fi, r.top, ctx.y + (nSize + 4) - nSize * 0.28);
       ctx.y -= 6;
       continue;
     }
