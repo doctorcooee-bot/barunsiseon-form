@@ -1,0 +1,8 @@
+# Local Netlify folder
+.netlify
+
+# 로컬 도구/문서/서버코드는 공개 저장소에 올리지 않음
+.claude/
+apps-script/
+배포/
+*.md
