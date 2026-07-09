@@ -236,20 +236,16 @@ async function drawFormBody(ctx, form, values, meta, C) {
       align: f.align || "left", lineGap: 4.5,
     });
   }
-  // 항목 구분선 (항상 전체 폭)
+  // 항목 사이 여백 (구분선은 그리지 않음 — 선이 필요하면 '구분선' 항목을 넣는다)
   function sep() {
     ctx.y -= sz.rowGap;
-    ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 6 }, end: { x: PAGE_W - MARGIN, y: ctx.y + 6 }, thickness: 0.5, color: C.line });
   }
   // 손글씨 이미지 값 (reg 영역 안에)
   async function drawImageValue(dataUrl, maxH, reg) {
-    const R = rightOf(reg);
     if (blank) {
-      // 빈 서류: 손으로 쓸 수 있도록 아래쪽에 밑줄을 둔 빈 영역을 확보
+      // 빈 서류: 손으로 쓸 수 있는 빈 영역만 확보 (밑줄 없음)
       ensureSpace(ctx, maxH + sz.rowGap);
-      ctx.y -= maxH;
-      ctx.page.drawLine({ start: { x: reg.x + 4, y: ctx.y + 3 }, end: { x: R, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
-      ctx.y -= sz.rowGap;
+      ctx.y -= maxH + sz.rowGap;
       return;
     }
     if (!dataUrl) {
@@ -267,12 +263,9 @@ async function drawFormBody(ctx, form, values, meta, C) {
   }
   // 텍스트 값 (주소 등) — 여러 줄이면 자동 줄바꿈. reg 영역 안에.
   function drawTextValue(text, reg) {
-    const R = rightOf(reg);
     if (blank) {
       ensureSpace(ctx, sz.pdfWrite + sz.rowGap);
-      ctx.y -= sz.pdfWrite;
-      ctx.page.drawLine({ start: { x: reg.x + 4, y: ctx.y + 3 }, end: { x: R, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
-      ctx.y -= sz.rowGap;
+      ctx.y -= sz.pdfWrite + sz.rowGap;
       return;
     }
     if (!text) {
@@ -361,6 +354,14 @@ async function drawFormBody(ctx, form, values, meta, C) {
   for (let fi = 0; fi < form.fields.length; fi++) {
     const f = form.fields[fi];
     if (f.type === "youtube") continue;   // 유튜브 항목은 출력/저장물에서 제외
+    if (f.type === "divider") {
+      // 사용자가 직접 넣은 구분선 (기본 자동 구분선은 없앴다)
+      ctx.y -= sz.rowGap + 2;
+      ensureSpace(ctx, 8);
+      ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 4 }, end: { x: PAGE_W - MARGIN, y: ctx.y + 4 }, thickness: 0.7, color: C.line });
+      ctx.y -= sz.rowGap + 2;
+      continue;
+    }
     if (f.type === "section") {
       ensureSpace(ctx, sz.sectionGap + 8);
       ctx.y -= sz.rowGap;

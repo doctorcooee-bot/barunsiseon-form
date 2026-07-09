@@ -17,6 +17,7 @@ const FIELD_TYPES = [
   { v: "section", t: "구역 제목" },
   { v: "note", t: "안내 문구 (읽기용)" },
   { v: "youtube", t: "유튜브 링크" },
+  { v: "divider", t: "구분선" },
 ];
 function typeName(v) { const f = FIELD_TYPES.find((x) => x.v === v); return f ? f.t : v; }
 
@@ -780,6 +781,7 @@ function efEditableHtml(f) {
 // 실제 화면(미리보기)처럼 보이는 항목 본문 HTML
 function efBodyHtml(f) {
   const req = f.required ? '<span class="req">*</span>' : "";
+  if (f.type === "divider") return `<div class="wys-divider"></div>`;
   const ed = efEditableHtml(f);
   if (f.type === "section") return `<div class="section-head">${ed}</div>`;
   if (f.type === "note") return `<div class="note-text">${ed}</div>`;
@@ -905,12 +907,14 @@ function efSettingsPanel(f, i) {
   panel.className = "wys-settings";
   const isChoice = f.type === "radio" || f.type === "checkbox";
   const isText = f.type === "section" || f.type === "note" || f.type === "youtube";
+  const isDivider = f.type === "divider";
   panel.innerHTML = `
     <label class="wys-set-label">종류</label>
     <select class="s-type box-input">
       ${FIELD_TYPES.map((t) => `<option value="${t.v}" ${t.v === f.type ? "selected" : ""}>${t.t}</option>`).join("")}
     </select>
-    <p class="wys-set-hint">${isText ? "내용" : "항목 이름"}은 위 미리보기에서 직접 입력하세요. 글자를 선택한 뒤 상단 메뉴로 색·크기·굵게를 글자별로 지정할 수 있습니다.</p>
+    <p class="wys-set-hint ${isDivider ? "hidden" : ""}">${isText ? "내용" : "항목 이름"}은 위 미리보기에서 직접 입력하세요. 글자를 선택한 뒤 상단 메뉴로 색·크기·굵게를 글자별로 지정할 수 있습니다.</p>
+    <p class="wys-set-hint ${isDivider ? "" : "hidden"}">가로 구분선을 그립니다. 출력·저장물에도 함께 표시됩니다.</p>
     <div class="s-opt-wrap ${isChoice ? "" : "hidden"}">
       <label class="wys-set-label">선택지 (한 줄에 하나씩)</label>
       <textarea class="s-options box-textarea">${escHtml((f.options || []).join("\n"))}</textarea>
@@ -927,13 +931,13 @@ function efSettingsPanel(f, i) {
       <label class="wys-set-label">유튜브 링크 <span style="color:var(--text-soft); font-weight:400;">— 작성 화면에서만 재생되며, 출력·저장(PDF·JPG)에는 포함되지 않습니다</span></label>
       <input class="s-youtube box-input" value="${escAttr(f.url || "")}" placeholder="예) https://youtu.be/xxxxxxxxxxx" />
     </div>
-    <label class="ef-req ${isText ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
+    <label class="ef-req ${isText || isDivider ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
   `;
 
   // 종류 변경
   panel.querySelector(".s-type").addEventListener("change", (e) => {
     f.type = e.target.value;
-    if (f.type === "section" || f.type === "note" || f.type === "youtube") { delete f.key; delete f.required; }
+    if (f.type === "section" || f.type === "note" || f.type === "youtube" || f.type === "divider") { delete f.key; delete f.required; }
     else if (!f.key) f.key = genId("k");
     renderEfPreview();
     const np = document.querySelector(`.wys-field[data-i="${i}"] .wys-settings`);

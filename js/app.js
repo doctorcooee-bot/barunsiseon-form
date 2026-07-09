@@ -280,6 +280,13 @@ function screenFill() {
       return;
     }
 
+    if (f.type === "divider") {
+      const hr = document.createElement("hr");
+      hr.className = "field-divider";
+      card.appendChild(hr);
+      return;
+    }
+
     if (f.type === "youtube") {
       const wrap = document.createElement("div");
       wrap.className = "yt-block";

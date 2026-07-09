@@ -34,7 +34,7 @@ const CONSENT_BULLETS = [
 function formSizing(scale) {
   // 0.35까지 허용: JPG 저장 서류를 한 페이지에 맞추려고 자동으로 더 줄일 수 있음
   const s = Math.min(1.5, Math.max(0.35, Number(scale) || 1));
-  const b = { label: 9.5, base: 10.5, writeH: 84, bigH: 150, signH: 200, pdfWrite: 22, pdfBig: 80, pdfSign: 55, rowGap: 4, sectionGap: 20 };
+  const b = { label: 9.5, base: 10.5, writeH: 84, bigH: 150, signH: 200, pdfWrite: 18, pdfBig: 76, pdfSign: 52, rowGap: 2, sectionGap: 16 };
   return {
     scale: s,
     label: b.label * s,
