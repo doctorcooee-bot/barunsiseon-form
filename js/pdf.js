@@ -409,20 +409,13 @@ function drawPatientNameLine(ctx, meta, C) {
 }
 
 // 여러 서류를 하나의 PDF 로 합침
-//  - 가장 앞장 : 환자 성명 + 전자문서 클라우드 보관 동의
-//  - 이후 서류마다 새 페이지에서 시작 (서로 이어 붙지 않음)
+//  - 서류마다 새 페이지에서 시작 (서로 이어 붙지 않음), 서류 관리 메뉴 순서대로
+//  - 가장 뒷장 : 환자 성명 + 전자문서 클라우드 보관 동의
 //  - 파일명은 날짜_이름_시각.pdf
 async function generateCombinedPdf(items, meta) {
   const C = colors();
   const { doc, font } = await newPdfDoc();
   const t = nowParts();
-
-  // 첫 페이지 : 환자 성명 + 클라우드 보관 동의
-  const cctx = { doc, font, page: doc.addPage([PAGE_W, PAGE_H]), y: PAGE_H - MARGIN };
-  drawFormHeader(cctx, "전자문서 클라우드 보관 동의", meta, t, C);
-  drawPatientNameLine(cctx, meta, C);
-  await drawConsentBody(cctx, meta, C, false);
-  drawFooter(cctx.page, C, font);
 
   // JPG 저장 서류가 한 페이지에 들어오는 배율을 미리 재기 위한 스크래치 문서(폰트 1회만 심음)
   let _scratch = null, _scratchFont = null;
@@ -461,6 +454,13 @@ async function generateCombinedPdf(items, meta) {
     drawFooter(ctx.page, C, font);
     formPages.push({ form: it.form, start, end: doc.getPageCount() });
   }
+
+  // 가장 뒷장 : 환자 성명 + 전자문서 클라우드 보관 동의
+  const cctx = { doc, font, page: doc.addPage([PAGE_W, PAGE_H]), y: PAGE_H - MARGIN };
+  drawFormHeader(cctx, "전자문서 클라우드 보관 동의", meta, t, C);
+  drawPatientNameLine(cctx, meta, C);
+  await drawConsentBody(cctx, meta, C, false);
+  drawFooter(cctx.page, C, font);
 
   const bytes = await doc.save();
   const blob = new Blob([bytes], { type: "application/pdf" });

@@ -132,6 +132,7 @@ function createWritingField(opts) {
   // 숫자 입력칸(핸드폰·주민번호·키/체중)은 키보드 전용 + 숫자패드
   const numFormat = opts.format || null;   // "phone" | "id" | "decimal" | null
   const typeOnly = !!numFormat;            // 손글씨 없이 키보드로만 입력
+  const numHint = opts.hint || "숫자를 입력해 주세요.";   // 숫자칸 빈칸 안내 문구
   if (numFormat) {
     // 숫자 칸은 숫자패드만 뜨게 한다. (소수점이 필요한 decimal 은 소수점 키가 있는 십진 키패드)
     ta.setAttribute("inputmode", numFormat === "decimal" ? "decimal" : "numeric");
@@ -149,7 +150,7 @@ function createWritingField(opts) {
     mode = "type";
     canvas.style.display = "none";
     ta.style.display = "block";
-    hint.textContent = "숫자를 입력해 주세요.";
+    hint.textContent = numHint;
     const sizeEl = wrap.querySelector(".write-size");
     if (sizeEl) sizeEl.style.display = "none";
   }
@@ -206,7 +207,7 @@ function createWritingField(opts) {
       mode = "type";
       ta.style.display = "block";
       canvas.style.display = "none";
-      hint.textContent = "숫자를 입력해 주세요.";
+      hint.textContent = numHint;
       hint.style.display = ta.value ? "none" : "";
       return;
     }
