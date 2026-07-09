@@ -182,6 +182,27 @@ function reorderForms(i, j) {
   screenFormManage();
 }
 
+// 서류 복사 : 원본을 그대로 복제해 바로 아래에 새 서류로 넣는다.
+function duplicateForm(id) {
+  const src = FORMS[id];
+  if (!src) return;
+  const clone = JSON.parse(JSON.stringify(src));
+  clone.id = genId("form");
+  clone.name = src.name + " (사본)";
+  (clone.fields || []).forEach((fld) => { if (fld.key) fld.key = genId("k"); });
+  // FORMS 객체의 키 순서를 다시 만들되, 원본 바로 뒤에 사본을 끼워 넣는다.
+  const ids = Object.keys(FORMS);
+  const saved = {};
+  ids.forEach((fid) => { saved[fid] = FORMS[fid]; });
+  Object.keys(FORMS).forEach((fid) => { delete FORMS[fid]; });
+  ids.forEach((fid) => {
+    FORMS[fid] = saved[fid];
+    if (fid === id) FORMS[clone.id] = clone;
+  });
+  persistForms();
+  screenFormManage();
+}
+
 function screenFormManage() {
   setStep("서류 관리");
   app.innerHTML = `
@@ -226,12 +247,14 @@ function screenFormManage() {
       </div>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-gray adm-edit" style="padding:8px 16px; min-height:42px; font-size:16px;">편집</button>
+        <button class="btn btn-gray adm-copy" style="padding:8px 16px; min-height:42px; font-size:16px;">복사</button>
         <button class="btn btn-gray adm-del" style="padding:8px 16px; min-height:42px; font-size:16px; color:var(--danger);">삭제</button>
       </div>
     `;
     item.querySelector(".adm-up").addEventListener("click", () => { reorderForms(idx, idx - 1); });
     item.querySelector(".adm-down").addEventListener("click", () => { reorderForms(idx, idx + 1); });
     item.querySelector(".adm-edit").addEventListener("click", () => screenEditForm(FORMS[id], false));
+    item.querySelector(".adm-copy").addEventListener("click", () => duplicateForm(id));
     item.querySelector(".adm-del").addEventListener("click", () => {
       if (!confirm(`'${f.name}' 서류를 삭제할까요?`)) return;
       delete FORMS[id];
