@@ -194,6 +194,16 @@ function runsToHtml(runs, f) {
   }).join("");
 }
 
+// 유튜브 주소에서 영상 ID 추출 (youtu.be/ID, watch?v=ID, embed/ID, shorts/ID, live/ID 지원)
+function youtubeId(url) {
+  if (!url) return "";
+  const s = String(url).trim();
+  const m = s.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;   // ID만 붙여넣은 경우
+  return "";
+}
+
 // "rgb(r, g, b)" 또는 "#rrggbb" → "#rrggbb"
 function rgbToHex(c) {
   if (!c) return "";

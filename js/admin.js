@@ -16,6 +16,7 @@ const FIELD_TYPES = [
   { v: "signature", t: "서명" },
   { v: "section", t: "구역 제목" },
   { v: "note", t: "안내 문구 (읽기용)" },
+  { v: "youtube", t: "유튜브 링크" },
 ];
 function typeName(v) { const f = FIELD_TYPES.find((x) => x.v === v); return f ? f.t : v; }
 
@@ -755,9 +756,26 @@ async function renderEfPdfPreview() {
   }
 }
 
+// 빈 편집영역에 옅게 보일 안내 문구
+function efPlaceholder(f) {
+  if (f.type === "section") return "구역 제목 입력";
+  if (f.type === "note") return "안내 문구 입력";
+  if (f.type === "youtube") return "영상 설명 입력 (선택)";
+  return "제목 입력 (비우면 출력에서 한 줄 줄어듭니다)";
+}
+// 유튜브 항목 미리보기 박스 (썸네일 또는 안내). 설정(⚙)에서 링크 입력.
+function efYtBoxHtml(f) {
+  const id = youtubeId(f.url);
+  if (id) {
+    return `<div class="yt-box" data-vid="${escAttr(id)}"><img class="yt-thumb" src="https://img.youtube.com/vi/${escAttr(id)}/hqdefault.jpg" alt="유튜브 미리보기" /><span class="yt-play">▶</span></div>`;
+  }
+  return `<div class="yt-box yt-empty" data-vid="">유튜브 링크를 설정(⚙)에서 입력하세요</div>`;
+}
 // 편집 가능한 리치텍스트 스팬 (글자 단위 색·크기·굵게)
 function efEditableHtml(f) {
-  return `<span class="wys-text" contenteditable="true" spellcheck="false">${runsToHtml(fieldRuns(f), f)}</span>`;
+  // 비어 있으면 자식 없이 두어 CSS :empty 로 안내문구가 보이게 함
+  const html = runsToText(fieldRuns(f)).length ? runsToHtml(fieldRuns(f), f) : "";
+  return `<span class="wys-text" contenteditable="true" spellcheck="false" data-ph="${escAttr(efPlaceholder(f))}">${html}</span>`;
 }
 // 실제 화면(미리보기)처럼 보이는 항목 본문 HTML
 function efBodyHtml(f) {
@@ -765,6 +783,7 @@ function efBodyHtml(f) {
   const ed = efEditableHtml(f);
   if (f.type === "section") return `<div class="section-head">${ed}</div>`;
   if (f.type === "note") return `<div class="note-text">${ed}</div>`;
+  if (f.type === "youtube") return `<div class="note-text yt-desc">${ed}</div>${efYtBoxHtml(f)}`;
   const label = `<label class="field-label">${ed}${req}</label>`;
   if (f.type === "write") return `${label}<div class="wys-box">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
   if (f.type === "writeBig") return `${label}<div class="wys-box tall">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
@@ -773,7 +792,9 @@ function efBodyHtml(f) {
   if (f.type === "radio" || f.type === "checkbox") {
     const opts = (f.options && f.options.length) ? f.options : ["선택지 1", "선택지 2"];
     const mark = f.type === "radio" ? "○" : "☐";
-    return `${label}<div class="choice-group">${opts.map((o) => `<span class="choice">${mark} ${escHtml(o)}</span>`).join("")}</div>`;
+    // 선택 항목은 제목(텍스트)을 지울 수 있는 X 버튼을 둔다(지우면 출력에서 제목 줄이 사라짐)
+    const clabel = `<label class="field-label">${ed}${req}<button type="button" class="wys-label-del" title="제목 삭제 (출력에서 한 줄 줄임)">✕</button></label>`;
+    return `${clabel}<div class="choice-group">${opts.map((o) => `<span class="choice">${mark} ${escHtml(o)}</span>`).join("")}</div>`;
   }
   return label;
 }
@@ -829,9 +850,20 @@ function efFieldBlock(f, i) {
     });
   }
 
+  // 선택 항목 제목 삭제(X) → 텍스트를 비워 출력에서 제목 줄을 없앤다
+  const labelDel = body.querySelector(".wys-label-del");
+  if (labelDel) {
+    labelDel.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      f.label = ""; delete f.runs;
+      renderEfPreview();
+      efSyncToolbar();
+    });
+  }
+
   // 본문 클릭 → 선택 (도구/설정/편집영역 제외)
   block.addEventListener("click", (e) => {
-    if (e.target.closest(".wys-tools") || e.target.closest(".wys-settings") || e.target.closest(".wys-text")) return;
+    if (e.target.closest(".wys-tools") || e.target.closest(".wys-settings") || e.target.closest(".wys-text") || e.target.closest(".wys-label-del")) return;
     efSelect(i);
   });
 
@@ -872,7 +904,7 @@ function efSettingsPanel(f, i) {
   const panel = document.createElement("div");
   panel.className = "wys-settings";
   const isChoice = f.type === "radio" || f.type === "checkbox";
-  const isText = f.type === "section" || f.type === "note";
+  const isText = f.type === "section" || f.type === "note" || f.type === "youtube";
   panel.innerHTML = `
     <label class="wys-set-label">종류</label>
     <select class="s-type box-input">
@@ -891,13 +923,17 @@ function efSettingsPanel(f, i) {
       <label class="wys-set-label">빈칸 안내 문구 <span style="color:var(--text-soft); font-weight:400;">— 빈칸에 옅게 표시되는 문구</span></label>
       <input class="s-hint box-input" value="${escAttr(f.hint || "")}" placeholder="예) 여기에 손으로 써주세요" />
     </div>
+    <div class="s-yt-wrap ${f.type === "youtube" ? "" : "hidden"}">
+      <label class="wys-set-label">유튜브 링크 <span style="color:var(--text-soft); font-weight:400;">— 작성 화면에서만 재생되며, 출력·저장(PDF·JPG)에는 포함되지 않습니다</span></label>
+      <input class="s-youtube box-input" value="${escAttr(f.url || "")}" placeholder="예) https://youtu.be/xxxxxxxxxxx" />
+    </div>
     <label class="ef-req ${isText ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
   `;
 
   // 종류 변경
   panel.querySelector(".s-type").addEventListener("change", (e) => {
     f.type = e.target.value;
-    if (f.type === "section" || f.type === "note") { delete f.key; delete f.required; }
+    if (f.type === "section" || f.type === "note" || f.type === "youtube") { delete f.key; delete f.required; }
     else if (!f.key) f.key = genId("k");
     renderEfPreview();
     const np = document.querySelector(`.wys-field[data-i="${i}"] .wys-settings`);
@@ -925,6 +961,19 @@ function efSettingsPanel(f, i) {
     f.format = fmtEl.value.trim();
     const box = document.querySelector(`.wys-field[data-i="${i}"] .wys-box`);
     if (box) box.textContent = f.format ? "표시형식: " + f.format : "숫자 입력 (표시형식 미지정)";
+  });
+
+  // 유튜브 링크 — 입력 시 미리보기 썸네일과 출력 미리보기 갱신
+  const ytEl = panel.querySelector(".s-youtube");
+  if (ytEl) ytEl.addEventListener("input", () => {
+    f.url = ytEl.value.trim();
+    const box = document.querySelector(`.wys-field[data-i="${i}"] .yt-box`);
+    if (box && box.dataset.vid !== youtubeId(f.url)) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = efYtBoxHtml(f);
+      box.replaceWith(tmp.firstElementChild);
+    }
+    scheduleEfPdfPreview();
   });
 
   // 빈칸 안내 문구 — 손글씨(write/writeBig)·숫자형식(number) 항목

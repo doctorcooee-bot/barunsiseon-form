@@ -225,6 +225,8 @@ async function drawFormBody(ctx, form, values, meta, C) {
 
   // 항목 라벨 (윗줄) — 글자 단위 서식(색·크기·굵기) + 정렬(문장 전체) 반영. reg 영역 안에 그림.
   function drawLabel(f, reg) {
+    // 제목(텍스트)이 비었으면 라벨 줄을 아예 그리지 않아 한 줄을 줄인다
+    if (!runsToText(fieldRuns(f)).trim()) return;
     ensureSpace(ctx, sz.label + 6);
     drawRichText(ctx, fieldRuns(f), {
       basePt: sz.label, defSize: f.size || 1,
@@ -358,6 +360,7 @@ async function drawFormBody(ctx, form, values, meta, C) {
 
   for (let fi = 0; fi < form.fields.length; fi++) {
     const f = form.fields[fi];
+    if (f.type === "youtube") continue;   // 유튜브 항목은 출력/저장물에서 제외
     if (f.type === "section") {
       ensureSpace(ctx, sz.sectionGap + 8);
       ctx.y -= sz.rowGap;

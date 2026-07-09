@@ -130,6 +130,44 @@ html, body {
   white-space: pre-wrap;
 }
 
+/* 유튜브 링크 항목 (작성 화면) — 설명 + 눌러서 재생 */
+.yt-block { margin: 10px 0 18px; }
+.yt-block .yt-desc { margin-bottom: 10px; }
+.yt-frame {
+  position: relative; width: 100%; aspect-ratio: 16 / 9;
+  background: #000; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--line);
+}
+.yt-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.yt-frame .yt-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.yt-frame .yt-play-btn {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 76px; height: 76px; border-radius: 50%;
+  border: none; cursor: pointer; color: #fff; font-size: 30px;
+  background: rgba(200,30,30,0.92); box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center; padding-left: 6px;
+}
+.yt-frame .yt-play-btn:hover { background: #e21e1e; transform: translate(-50%, -50%) scale(1.06); }
+.yt-frame.yt-missing {
+  aspect-ratio: auto; background: #f6f8f9; color: var(--text-soft);
+  padding: 22px; text-align: center; font-size: 15px;
+}
+/* 유튜브 항목 미리보기 박스 (편집기) */
+.wys-body .yt-box {
+  position: relative; margin-top: 8px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--line); background: #000; aspect-ratio: 16 / 9; max-width: 320px;
+}
+.wys-body .yt-box .yt-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wys-body .yt-box .yt-play {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 52px; height: 52px; border-radius: 50%; color: #fff; font-size: 20px;
+  background: rgba(200,30,30,0.92); display: flex; align-items: center; justify-content: center; padding-left: 4px;
+}
+.wys-body .yt-box.yt-empty {
+  aspect-ratio: auto; background: #fbfdfe; color: var(--text-soft);
+  font-size: 14px; padding: 14px; display: flex; align-items: center; border-style: dashed;
+}
+
 /* 서류 전체를 덮는 강조 필기 오버레이 */
 .annot-host { position: relative; }
 .annot-overlay { position: absolute; top: 0; left: 0; pointer-events: none; touch-action: auto; z-index: 5; }
@@ -478,6 +516,16 @@ html, body {
   border-radius: 4px; cursor: text;
 }
 .wys-body .wys-text:focus { box-shadow: 0 0 0 2px rgba(63,124,151,.35); background: #fbfdfe; }
+/* 빈 편집영역 안내문구 */
+.wys-body .wys-text:empty::before { content: attr(data-ph); color: var(--text-soft); font-weight: 400; }
+/* 선택 항목 제목 삭제(X) 버튼 */
+.wys-body .wys-label-del {
+  pointer-events: auto; margin-left: 6px; vertical-align: middle;
+  width: 22px; height: 22px; line-height: 1; padding: 0;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: #f4f7f9; color: var(--danger); font-size: 13px; cursor: pointer;
+}
+.wys-body .wys-label-del:hover { background: #fdeceb; border-color: var(--danger); }
 .wys-settings .wys-set-hint { font-size: 13px; color: var(--text-soft); margin: 2px 0 4px; line-height: 1.5; }
 .wys-box {
   min-height: 46px; border: 1px solid var(--line); border-radius: 10px;

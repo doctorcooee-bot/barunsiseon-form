@@ -280,10 +280,40 @@ function screenFill() {
       return;
     }
 
+    if (f.type === "youtube") {
+      const wrap = document.createElement("div");
+      wrap.className = "yt-block";
+      if (runsToText(fieldRuns(f)).trim()) {
+        const desc = document.createElement("div");
+        desc.className = "note-text yt-desc";
+        desc.innerHTML = runsToHtml(fieldRuns(f), f);
+        applyFieldTextStyle(desc, f);
+        wrap.appendChild(desc);
+      }
+      const id = youtubeId(f.url);
+      const frame = document.createElement("div");
+      frame.className = "yt-frame";
+      if (id) {
+        // 썸네일 + 가운데 재생 버튼 → 누르면 그때 영상이 재생됨 (클릭 후 로드)
+        frame.innerHTML = `<img class="yt-poster" src="https://img.youtube.com/vi/${escAttr(id)}/hqdefault.jpg" alt="영상 미리보기" /><button type="button" class="yt-play-btn" aria-label="영상 재생">▶</button>`;
+        frame.querySelector(".yt-play-btn").addEventListener("click", () => {
+          frame.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}?autoplay=1" title="유튜브 영상" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+        });
+      } else {
+        frame.classList.add("yt-missing");
+        frame.textContent = "유튜브 링크가 설정되지 않았습니다";
+      }
+      wrap.appendChild(frame);
+      card.appendChild(wrap);
+      return;
+    }
+
     const field = document.createElement("div");
     field.className = "field";
     const req = f.required ? '<span class="req">*</span>' : "";
-    const labelHtml = `<label class="field-label">${runsToHtml(fieldRuns(f), f)}${req}</label>`;
+    // 제목(텍스트)을 지운 항목은 라벨 줄을 표시하지 않는다(출력과 동일하게 한 줄 줄임)
+    const hasLabel = runsToText(fieldRuns(f)).trim() !== "";
+    const labelHtml = hasLabel ? `<label class="field-label">${runsToHtml(fieldRuns(f), f)}${req}</label>` : "";
 
     if (f.type === "write" || f.type === "writeBig" || f.type === "signature" || f.type === "number") {
       field.innerHTML = labelHtml;
