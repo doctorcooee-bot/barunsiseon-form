@@ -245,7 +245,8 @@ function screenFormManage() {
           항목 ${f.fields.filter((x) => x.type !== "section" && x.type !== "note").length}개 · ${usedBy.length ? "사용: " + usedBy.join(", ") : "연결된 환자군 없음"}${f.saveJpg ? ' · <span style="color:var(--brand);font-weight:600;">JPG저장</span>' : ""}
         </div>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+        <button class="btn btn-gray adm-preview" style="padding:8px 16px; min-height:42px; font-size:16px;">미리보기·출력</button>
         <button class="btn btn-gray adm-edit" style="padding:8px 16px; min-height:42px; font-size:16px;">편집</button>
         <button class="btn btn-gray adm-copy" style="padding:8px 16px; min-height:42px; font-size:16px;">복사</button>
         <button class="btn btn-gray adm-del" style="padding:8px 16px; min-height:42px; font-size:16px; color:var(--danger);">삭제</button>
@@ -253,6 +254,7 @@ function screenFormManage() {
     `;
     item.querySelector(".adm-up").addEventListener("click", () => { reorderForms(idx, idx - 1); });
     item.querySelector(".adm-down").addEventListener("click", () => { reorderForms(idx, idx + 1); });
+    item.querySelector(".adm-preview").addEventListener("click", () => openFormPreviewModal(id));
     item.querySelector(".adm-edit").addEventListener("click", () => screenEditForm(FORMS[id], false));
     item.querySelector(".adm-copy").addEventListener("click", () => duplicateForm(id));
     item.querySelector(".adm-del").addEventListener("click", () => {
@@ -279,6 +281,52 @@ function screenFormManage() {
     screenFormManage();
   });
   document.getElementById("btn-back").addEventListener("click", screenStaffMenu);
+}
+
+// 서류 하나의 빈 양식 미리보기 + 인쇄/다운로드 (팝업)
+function openFormPreviewModal(id) {
+  const form = FORMS[id];
+  if (!form) return;
+  const overlay = document.createElement("div");
+  overlay.className = "pv-modal";
+  overlay.innerHTML = `
+    <div class="pv-modal-box">
+      <div class="pv-modal-head">
+        <div class="pv-modal-title">${escHtml(form.name)}</div>
+        <button class="btn btn-gray pv-close" style="padding:6px 14px; min-height:38px; font-size:15px;">닫기 ✕</button>
+      </div>
+      <div class="pv-modal-actions">
+        <button class="btn btn-primary pv-print" style="padding:8px 16px; min-height:40px; font-size:15px;" disabled>🖨 인쇄</button>
+        <button class="btn btn-gray pv-dl" style="padding:8px 16px; min-height:40px; font-size:15px;" disabled>⬇ 다운로드</button>
+      </div>
+      <div class="pv-modal-body" id="pv-modal-body">
+        <div style="padding:20px; color:var(--text-soft);">미리보기를 준비하고 있습니다…</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector(".pv-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+  (async () => {
+    try {
+      const res = await generatePdf(form, {}, { blank: true, groupName: "" });
+      if (!overlay.isConnected) return;
+      const body = overlay.querySelector("#pv-modal-body");
+      body.innerHTML = "";
+      await renderPdfIntoElement(res.bytes, body);
+      const safe = String(form.name).replace(/[\\/:*?"<>|\s]/g, "").trim() || "서류";
+      const printBtn = overlay.querySelector(".pv-print");
+      const dlBtn = overlay.querySelector(".pv-dl");
+      printBtn.disabled = false; dlBtn.disabled = false;
+      printBtn.addEventListener("click", () => printPdfBlob(res.blob));
+      dlBtn.addEventListener("click", () => downloadPdf(res.blob, `${safe}_빈서류.pdf`));
+    } catch (e) {
+      if (!overlay.isConnected) return;
+      overlay.querySelector("#pv-modal-body").innerHTML =
+        `<div style="padding:20px; color:var(--danger);">미리보기 생성 중 문제가 발생했습니다: ${escHtml(e.message)}</div>`;
+    }
+  })();
 }
 
 // -------------------------------------------------------------
@@ -406,6 +454,7 @@ function screenEditForm(formObj, isNew) {
 function efApplyAlign(f, i) {
   const el = document.querySelector(`.wys-field[data-i="${i}"] .wys-text`);
   if (el && el.parentElement) el.parentElement.style.textAlign = f.align || "";
+  scheduleEfPdfPreview();
 }
 
 // 편집기 리치텍스트 선택영역 추적 (색/크기/굵게 버튼이 포커스를 가져가도 유지)
@@ -509,6 +558,7 @@ function efApplyRunFmt(attr, value) {
   efSetSelection(el, sel.start, sel.end);
   efLastSel = { i: efSel, start: sel.start, end: sel.end };
   efSyncToolbar();
+  scheduleEfPdfPreview();
 }
 
 function drawEditor() {
@@ -539,27 +589,41 @@ function drawEditor() {
       </div>
     </div>
 
-    <div class="card">
-      <label class="field-label">서류 이름</label>
-      <input id="ef-name" class="box-input" value="${escAttr(editingForm.name)}" placeholder="예) 초진기록지" />
+    <div class="ef-layout">
+      <div class="ef-main">
+        <div class="card">
+          <label class="field-label">서류 이름</label>
+          <input id="ef-name" class="box-input" value="${escAttr(editingForm.name)}" placeholder="예) 초진기록지" />
 
-      <label class="field-label" style="margin-top:18px;">전체 크기(밀도) <span id="ef-scale-val" class="scale-val"></span></label>
-      <input type="range" id="ef-scale" class="scale-range" min="70" max="150" step="5" />
-      <div class="scale-ends"><span>작게 (한 페이지에 많이)</span><span>크게</span></div>
+          <label class="field-label" style="margin-top:18px;">전체 크기(밀도) <span id="ef-scale-val" class="scale-val"></span></label>
+          <input type="range" id="ef-scale" class="scale-range" min="70" max="150" step="5" />
+          <div class="scale-ends"><span>작게 (한 페이지에 많이)</span><span>크게</span></div>
 
-      <label class="choice" id="ef-jpg-label" style="margin-top:18px; display:flex; align-items:center; gap:10px;">
-        <input type="checkbox" id="ef-savejpg" />
-        <span>JPG로도 저장 <span style="color:var(--text-soft); font-size:14px;">(PDF와 함께 그림파일로도 남깁니다)</span></span>
-      </label>
-    </div>
+          <label class="choice" id="ef-jpg-label" style="margin-top:18px; display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="ef-savejpg" />
+            <span>JPG로도 저장 <span style="color:var(--text-soft); font-size:14px;">(PDF와 함께 그림파일로도 남깁니다)</span></span>
+          </label>
+        </div>
 
-    <div style="font-weight:700; margin:14px 2px 6px;">서류 미리보기 <span style="color:var(--text-soft); font-weight:400; font-size:14px;">— 항목을 눌러 위 메뉴로 꾸미세요</span></div>
-    <div class="wys-preview" id="ef-preview"></div>
-    <button class="btn btn-ghost btn-block" id="btn-add-field" style="margin-top:8px;">+ 항목 추가</button>
+        <div style="font-weight:700; margin:14px 2px 6px;">항목 편집 <span style="color:var(--text-soft); font-weight:400; font-size:14px;">— 항목을 눌러 위 메뉴로 꾸미세요</span></div>
+        <div class="wys-preview" id="ef-preview"></div>
+        <button class="btn btn-ghost btn-block" id="btn-add-field" style="margin-top:8px;">+ 항목 추가</button>
 
-    <div class="card" style="margin-top:22px;">
-      <label class="field-label">이 서류를 사용할 환자군</label>
-      <div class="choice-group" id="ef-groups"></div>
+        <div class="card" style="margin-top:22px;">
+          <label class="field-label">이 서류를 사용할 환자군</label>
+          <div class="choice-group" id="ef-groups"></div>
+        </div>
+      </div>
+
+      <div class="ef-side">
+        <div class="ef-pdf-panel">
+          <div class="ef-pdf-panel-head">
+            <span>실제 출력 미리보기 <span style="color:var(--text-soft); font-weight:400; font-size:13px;">— 수정하면 자동으로 갱신됩니다</span></span>
+            <button type="button" class="btn btn-gray" id="ef-pdf-toggle" style="padding:5px 12px; min-height:34px; font-size:14px;">숨기기</button>
+          </div>
+          <div class="ef-pdf-preview" id="ef-pdf-preview"></div>
+        </div>
+      </div>
     </div>
 
     <div class="footer-bar">
@@ -570,6 +634,19 @@ function drawEditor() {
 
   renderEfPreview();
   wireEfToolbar();
+
+  // 실제 출력(PDF) 미리보기 — 접기/펼치기 + 편집 시 자동 갱신
+  const pdfToggle = document.getElementById("ef-pdf-toggle");
+  pdfToggle.addEventListener("click", () => {
+    const box = document.getElementById("ef-pdf-preview");
+    const hidden = box.classList.toggle("hidden");
+    pdfToggle.textContent = hidden ? "보이기" : "숨기기";
+    if (!hidden) renderEfPdfPreview();
+  });
+  // 편집영역(항목·설정 입력)에서 값이 바뀌면 PDF 미리보기를 자동 갱신
+  const efPrev = document.getElementById("ef-preview");
+  efPrev.addEventListener("input", scheduleEfPdfPreview);
+  efPrev.addEventListener("change", scheduleEfPdfPreview);
 
   // 환자군 체크
   const gc = document.getElementById("ef-groups");
@@ -591,6 +668,7 @@ function drawEditor() {
   scaleEl.addEventListener("input", () => {
     editingForm.scale = Number(scaleEl.value) / 100;
     scaleVal.textContent = scaleEl.value + "%";
+    scheduleEfPdfPreview();
   });
 
   // JPG로도 저장 옵션
@@ -606,6 +684,7 @@ function drawEditor() {
   // 서류 이름 실시간 반영
   document.getElementById("ef-name").addEventListener("input", (e) => {
     editingForm.name = e.target.value;
+    scheduleEfPdfPreview();
   });
 
   document.getElementById("btn-add-field").addEventListener("click", () => {
@@ -628,6 +707,33 @@ function renderEfPreview() {
   if (!wrap) return;
   wrap.innerHTML = "";
   editingForm.fields.forEach((f, i) => wrap.appendChild(efFieldBlock(f, i)));
+  scheduleEfPdfPreview();
+}
+
+// 실제 출력(PDF) 미리보기 — 잦은 편집에 대비해 잠깐 모아서 다시 그린다
+let _efPdfTimer = null;
+let _efPdfToken = 0;
+function scheduleEfPdfPreview() {
+  const box = document.getElementById("ef-pdf-preview");
+  if (!box || box.classList.contains("hidden")) return;
+  clearTimeout(_efPdfTimer);
+  _efPdfTimer = setTimeout(renderEfPdfPreview, 500);
+}
+async function renderEfPdfPreview() {
+  const box = document.getElementById("ef-pdf-preview");
+  if (!box || box.classList.contains("hidden") || !editingForm) return;
+  const token = ++_efPdfToken;
+  try {
+    const res = await generatePdf(editingForm, {}, { blank: true, groupName: "" });
+    if (token !== _efPdfToken) return;   // 그 사이 또 바뀌었으면 버림
+    const cur = document.getElementById("ef-pdf-preview");
+    if (!cur) return;
+    await renderPdfIntoElement(res.bytes, cur);
+  } catch (e) {
+    if (token !== _efPdfToken) return;
+    const cur = document.getElementById("ef-pdf-preview");
+    if (cur) cur.innerHTML = `<div style="padding:14px; color:var(--danger); font-size:14px;">미리보기를 만들 수 없습니다: ${escHtml(e.message)}</div>`;
+  }
 }
 
 // 편집 가능한 리치텍스트 스팬 (글자 단위 색·크기·굵게)

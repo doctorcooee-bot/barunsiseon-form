@@ -876,7 +876,6 @@ function screenStaffMenu() {
     <p class="screen-desc">직원용 기능입니다.</p>
     <div style="display:flex; flex-direction:column; gap:14px; margin-top:8px;">
       <button class="btn btn-ghost btn-block" id="sm-search" style="min-height:64px; font-size:18px;">📁 저장된 서류 보기</button>
-      <button class="btn btn-ghost btn-block" id="sm-preview" style="min-height:64px; font-size:18px;">🔍 서류 미리보기 · 출력</button>
       <button class="btn btn-ghost btn-block" id="sm-forms" style="min-height:64px; font-size:18px;">📋 서류 관리</button>
       <button class="btn btn-ghost btn-block" id="sm-groups" style="min-height:64px; font-size:18px;">🗂 환자군별 서류 선택</button>
     </div>
@@ -885,73 +884,9 @@ function screenStaffMenu() {
     </div>
   `;
   document.getElementById("sm-search").addEventListener("click", screenSearch);
-  document.getElementById("sm-preview").addEventListener("click", screenPreviewForms);
   document.getElementById("sm-forms").addEventListener("click", screenFormManage);
   document.getElementById("sm-groups").addEventListener("click", screenGroupForms);
   document.getElementById("btn-back").addEventListener("click", screenStart);
-}
-
-// -------------------------------------------------------------
-//  서류 미리보기 : 빈 서류 모양을 화면에서 바로 확인
-// -------------------------------------------------------------
-function screenPreviewForms() {
-  setStep("서류 미리보기");
-  app.innerHTML = `
-    <h2 class="screen-title">서류 미리보기 · 출력</h2>
-    <p class="screen-desc">서류를 선택하면 빈 양식을 미리 보고, 바로 인쇄하거나 다운로드할 수 있습니다.</p>
-    <div class="select-list compact" id="pv-form-list"></div>
-    <div id="pv-output" style="margin-top:16px;"></div>
-    <div class="footer-bar">
-      <button class="btn btn-primary btn-block" id="btn-back">← 직원 메뉴</button>
-    </div>
-  `;
-
-  const formIds = Object.keys(FORMS);
-  const list = document.getElementById("pv-form-list");
-  const itemEls = {};
-  let current = null;
-
-  formIds.forEach((id) => {
-    const f = FORMS[id];
-    const item = document.createElement("div");
-    item.className = "select-item";
-    item.innerHTML = `<div class="label-wrap"><span class="check">✓</span> ${escHtml(f.name)}</div>`;
-    item.addEventListener("click", () => {
-      formIds.forEach((x) => itemEls[x].classList.remove("selected"));
-      item.classList.add("selected");
-      current = id;
-      showPreview(id);
-    });
-    itemEls[id] = item;
-    list.appendChild(item);
-  });
-
-  async function showPreview(id) {
-    const out = document.getElementById("pv-output");
-    out.innerHTML = `<div class="card"><div style="color:#667; padding:8px;">미리보기를 준비하고 있습니다…</div></div>`;
-    try {
-      const form = FORMS[id];
-      const res = await generatePdf(form, {}, { blank: true, groupName: "" });
-      if (current !== id) return;
-      const safe = String(form.name).replace(/[\\/:*?"<>|\s]/g, "").trim() || "서류";
-      out.innerHTML = `
-        <div class="card" style="padding:12px;">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button class="btn btn-primary" id="pv-print" style="padding:8px 16px; min-height:40px; font-size:15px;">🖨 인쇄</button>
-            <button class="btn btn-gray" id="pv-dl" style="padding:8px 16px; min-height:40px; font-size:15px;">⬇ 다운로드</button>
-          </div>
-          <iframe src="${res.url}" style="width:100%; height:70vh; border:0; border-radius:8px; background:#fff;"></iframe>
-        </div>`;
-      document.getElementById("pv-print").addEventListener("click", () => printPdfBlob(res.blob));
-      document.getElementById("pv-dl").addEventListener("click", () => downloadPdf(res.blob, `${safe}_빈서류.pdf`));
-      out.scrollIntoView({ behavior: "smooth", block: "start" });
-    } catch (e) {
-      console.error(e);
-      out.innerHTML = `<div class="card"><div style="color:#c0392b; padding:8px;">미리보기 생성 중 문제가 발생했습니다: ${escHtml(e.message)}</div></div>`;
-    }
-  }
-
-  document.getElementById("btn-back").addEventListener("click", screenStaffMenu);
 }
 
 // PDF를 숨겨진 프레임에서 인쇄 (실패하면 새 탭으로 열어 인쇄)
