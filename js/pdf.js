@@ -353,7 +353,7 @@ async function drawFormBody(ctx, form, values, meta, C) {
   async function drawBodyChart(f, val) {
     if (!doc.__bcImg) doc.__bcImg = await doc.embedPng(await getBodyChartBytes());
     const img = doc.__bcImg;
-    const w = CONTENT_W;
+    const w = CONTENT_W / 3;   // 지면 절약: 전체 폭의 1/3 크기로 출력
     const h = (w * img.height) / img.width;
     ensureSpace(ctx, h + sz.rowGap);
     const topY = ctx.y;
