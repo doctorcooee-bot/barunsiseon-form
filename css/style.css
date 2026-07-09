@@ -391,6 +391,20 @@ html, body {
 .ft-color-dot { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(0,0,0,.15); }
 .ft-color-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
+/* 글자 색 팔레트 (기본 계열 · 강조 계열 · 직접 선택) */
+.ft-color-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ft-pal {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; min-height: 42px;
+}
+.ft-pal-lbl { font-size: 13px; color: var(--text-soft); font-weight: 700; margin-right: 2px; }
+.ft-sw {
+  width: 22px; height: 22px; padding: 0; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(0,0,0,.18); box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+}
+.ft-sw:hover { transform: scale(1.12); }
+.btn-saved { background: var(--ok) !important; border-color: var(--ok) !important; }
+
 /* 실제 출력(PDF) 미리보기 패널 (편집기) */
 .ef-pdf-panel {
   border: 1px solid var(--line); border-radius: 12px;

@@ -561,6 +561,15 @@ function efApplyRunFmt(attr, value) {
   scheduleEfPdfPreview();
 }
 
+// 글자 색 팔레트 — 설문지에 어울리는 차분한 기본 계열 + 강조 계열
+const EF_THEME_COLORS = ["#2c3e50", "#5f7481", "#34739e", "#2e7d6b", "#7a8a99", "#4a4a4a"];
+const EF_ACCENT_COLORS = ["#c0392b", "#e67e22", "#d4a017", "#27ae60", "#2980b9", "#8e44ad"];
+function efSwatches(list) {
+  return list
+    .map((c) => `<button type="button" class="ft-sw" data-color="${c}" style="background:${c}" title="${c}"></button>`)
+    .join("");
+}
+
 function drawEditor() {
   setStep(editingIsNew ? "새 서류" : "서류 편집");
   app.innerHTML = `
@@ -580,12 +589,22 @@ function drawEditor() {
           <span class="ft-size-val" id="ft-size-val">100%</span>
           <button type="button" class="ft-btn" id="ft-size-up" title="크게">A+</button>
         </div>
-        <label class="ft-color" title="글자 색">
-          <span class="ft-color-dot" id="ft-color-dot"></span>
-          <input type="color" id="ft-color-input" value="#5f7481" />
-          <span>색</span>
-        </label>
-        <button type="button" class="ft-btn" id="ft-color-reset">기본색</button>
+        <div class="ft-color-group">
+          <div class="ft-pal" title="설문지에 어울리는 기본 색">
+            <span class="ft-pal-lbl">기본</span>
+            ${efSwatches(EF_THEME_COLORS)}
+          </div>
+          <div class="ft-pal" title="강조용 색">
+            <span class="ft-pal-lbl">강조</span>
+            ${efSwatches(EF_ACCENT_COLORS)}
+          </div>
+          <label class="ft-color" title="직접 선택(스포이드)">
+            <span class="ft-color-dot" id="ft-color-dot"></span>
+            <input type="color" id="ft-color-input" value="#5f7481" />
+            <span>직접</span>
+          </label>
+          <button type="button" class="ft-btn" id="ft-color-reset">기본색</button>
+        </div>
       </div>
     </div>
 
@@ -970,6 +989,9 @@ function wireEfToolbar() {
   });
   document.getElementById("ft-size-dn").addEventListener("click", () => efBumpSize(-0.1));
   document.getElementById("ft-size-up").addEventListener("click", () => efBumpSize(0.1));
+  tb.querySelectorAll(".ft-sw").forEach((b) => {
+    b.addEventListener("click", () => efApplyRunFmt("color", b.dataset.color));
+  });
   const ci = document.getElementById("ft-color-input");
   ci.addEventListener("input", () => {
     document.getElementById("ft-color-dot").style.background = ci.value;
@@ -1022,8 +1044,8 @@ function saveEditor() {
       return alert(`'${f.label || "선택 항목"}'의 선택지를 입력하세요.`);
     }
   }
-  // 저장
-  FORMS[editingForm.id] = editingForm;
+  // 저장 (FORMS 에는 사본을 넣어, 편집을 이어가도 저장 전 내용이 섞이지 않게 함)
+  FORMS[editingForm.id] = _clone(editingForm);
   persistForms();
   // 환자군 연결 갱신
   const selected = [...document.querySelectorAll(".eg-check:checked")].map((c) => c.value);
@@ -1035,6 +1057,22 @@ function saveEditor() {
     if (!want && has) g.formIds = g.formIds.filter((x) => x !== editingForm.id);
   });
   persistGroups();
-  alert("저장되었습니다.");
-  screenFormManage();
+  // 편집 메뉴에 그대로 머무르며 계속 편집할 수 있게, 페이지 이동 없이 버튼에만 저장 표시
+  editingIsNew = false;
+  setStep("서류 편집");
+  efFlashSaved();
+}
+
+// 저장 버튼에 잠깐 '저장됨' 을 표시(화면 이동 없이 편집 계속)
+let _efSavedTimer = null;
+function efFlashSaved() {
+  const btn = document.getElementById("btn-ef-save");
+  if (!btn) return;
+  btn.textContent = "저장됨 ✓";
+  btn.classList.add("btn-saved");
+  clearTimeout(_efSavedTimer);
+  _efSavedTimer = setTimeout(() => {
+    const b = document.getElementById("btn-ef-save");
+    if (b) { b.textContent = "저장"; b.classList.remove("btn-saved"); }
+  }, 1600);
 }
