@@ -393,6 +393,7 @@ async function drawFormBody(ctx, form, values, meta, C) {
   for (let fi = 0; fi < form.fields.length; fi++) {
     const f = form.fields[fi];
     if (f.type === "youtube") continue;   // 유튜브 항목은 출력/저장물에서 제외
+    if (f.type === "agreeAll") continue;  // '전체 동의' 버튼은 작성 화면 전용 (출력 제외)
     if (f.type === "divider") {
       // 사용자가 직접 넣은 구분선 (기본 자동 구분선은 없앴다)
       ctx.y -= sz.rowGap + 2;

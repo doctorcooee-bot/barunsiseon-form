@@ -190,6 +190,24 @@ html, body {
 .wys-bodychart img { height: 120px; width: auto; border: 1px solid var(--line); border-radius: 8px; }
 .wys-bodychart span { font-size: 13px; color: var(--text-soft); }
 
+/* 전체 동의 버튼 — 작성 화면 */
+.agree-all-field { margin: 10px 0; }
+.agree-all-btn {
+  width: 100%; padding: 14px 16px; border: 2px solid var(--brand); border-radius: 12px;
+  background: var(--brand-light); color: var(--brand-dark); font-size: 17px; font-weight: 700;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.agree-all-btn:active { transform: scale(0.99); }
+.agree-all-btn.agreed { background: var(--brand); color: #fff; }
+
+/* 전체 동의 버튼 — 편집기 미리보기 */
+.wys-agreeall { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.wys-agreeall .agreeall-btn {
+  padding: 10px 16px; border: 2px solid var(--brand); border-radius: 12px;
+  background: var(--brand-light); color: var(--brand-dark); font-weight: 700;
+}
+.wys-agreeall .agreeall-hint { font-size: 12px; color: var(--text-soft); }
+
 /* 서류 전체를 덮는 강조 필기 오버레이 */
 .annot-host { position: relative; }
 .annot-overlay { position: absolute; top: 0; left: 0; pointer-events: none; touch-action: auto; z-index: 5; }

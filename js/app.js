@@ -359,6 +359,23 @@ function screenFill() {
       return;
     }
 
+    if (f.type === "agreeAll") {
+      const wrap = document.createElement("div");
+      wrap.className = "field agree-all-field";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "agree-all-btn";
+      const has = runsToText(fieldRuns(f)).trim() !== "";
+      btn.innerHTML = has ? runsToHtml(fieldRuns(f), f) : "위 항목에 모두 동의합니다";
+      btn.addEventListener("click", () => {
+        const n = agreeAllInCard(card);
+        btn.classList.add("agreed");
+      });
+      wrap.appendChild(btn);
+      card.appendChild(wrap);
+      return;
+    }
+
     if (f.type === "bodychart") {
       const field = document.createElement("div");
       field.className = "field";
@@ -551,8 +568,9 @@ function screenFill() {
     for (const f of form.fields) {
       if (!f.required) continue;
       const v = values[f.key];
-      const isHand = (f.type === "write" || f.type === "writeBig" || f.type === "signature");
-      const empty = isHand ? !v : (!v || (Array.isArray(v) && !v.length));
+      const typed = values["__t_" + f.key];   // 키보드로 친 글자(있으면 채워진 것으로 인정)
+      const isHand = (f.type === "write" || f.type === "writeBig" || f.type === "signature" || f.type === "number");
+      const empty = isHand ? (!v && !typed) : (!v || (Array.isArray(v) && !v.length));
       if (empty) {
         return alert(`'${f.label}' 항목은 필수입니다.`);
       }
@@ -643,6 +661,23 @@ function setupAnnotOverlay(card) {
 }
 
 // 화면에서 입력값 읽기
+// '전체 동의' 버튼: 현재 서류(card) 안의 모든 동의 항목에 '동의함'을 체크한다.
+//  - '동의함' 선택지가 있는 라디오·체크박스 항목이 대상.
+//  - '동의하지 않음'이 켜져 있으면 해제한다. 라벨 하이라이트도 갱신.
+function agreeAllInCard(card) {
+  let n = 0;
+  card.querySelectorAll(".choice input").forEach((inp) => {
+    if (inp.value === "동의함" && !inp.checked) { inp.checked = true; n++; }
+    else if (inp.value === "동의하지 않음" && inp.checked) { inp.checked = false; }
+  });
+  // 모든 선택지 라벨의 하이라이트를 현재 체크 상태에 맞게 갱신 (라디오는 그룹 내 자동 해제 반영)
+  card.querySelectorAll(".choice").forEach((lbl) => {
+    const inp = lbl.querySelector("input");
+    if (inp) lbl.classList.toggle("selected", inp.checked);
+  });
+  return n;
+}
+
 function readFormValues(form, card, sigRefs) {
   const out = {};
   form.fields.forEach((f) => {

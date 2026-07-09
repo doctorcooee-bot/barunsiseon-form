@@ -19,6 +19,7 @@ const FIELD_TYPES = [
   { v: "youtube", t: "유튜브 링크" },
   { v: "divider", t: "구분선" },
   { v: "bodychart", t: "인체 그림 (아픈 곳 표시)" },
+  { v: "agreeAll", t: "전체 동의 버튼" },
 ];
 function typeName(v) { const f = FIELD_TYPES.find((x) => x.v === v); return f ? f.t : v; }
 
@@ -763,6 +764,7 @@ function efPlaceholder(f) {
   if (f.type === "section") return "구역 제목 입력";
   if (f.type === "note") return "안내 문구 입력";
   if (f.type === "youtube") return "영상 설명 입력 (선택)";
+  if (f.type === "agreeAll") return "버튼 문구 입력 (예: 위 항목에 모두 동의합니다)";
   return "제목 입력 (비우면 출력에서 한 줄 줄어듭니다)";
 }
 // 유튜브 항목 미리보기 박스 (썸네일 또는 안내). 설정(⚙)에서 링크 입력.
@@ -787,6 +789,7 @@ function efBodyHtml(f) {
   if (f.type === "section") return `<div class="section-head">${ed}</div>`;
   if (f.type === "note") return `<div class="note-text">${ed}</div>`;
   if (f.type === "youtube") return `<div class="note-text yt-desc">${ed}</div>${efYtBoxHtml(f)}`;
+  if (f.type === "agreeAll") return `<div class="wys-agreeall"><span class="agreeall-btn">${ed}</span><span class="agreeall-hint">— 누르면 이 서류의 모든 동의 항목에 '동의함'이 체크됩니다</span></div>`;
   const label = `<label class="field-label">${ed}${req}</label>`;
   if (f.type === "bodychart") return `${label}<div class="wys-bodychart"><img src="img/bodychart.png" alt="인체 그림" /><span>작성 화면에서 아픈 곳을 눌러 표시합니다</span></div>`;
   if (f.type === "write") return `${label}<div class="wys-box">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
@@ -911,13 +914,15 @@ function efSettingsPanel(f, i) {
   const isText = f.type === "section" || f.type === "note" || f.type === "youtube";
   const isDivider = f.type === "divider";
   const isBody = f.type === "bodychart";
+  const isAgree = f.type === "agreeAll";
   panel.innerHTML = `
     <label class="wys-set-label">종류</label>
     <select class="s-type box-input">
       ${FIELD_TYPES.map((t) => `<option value="${t.v}" ${t.v === f.type ? "selected" : ""}>${t.t}</option>`).join("")}
     </select>
-    <p class="wys-set-hint ${isDivider ? "hidden" : ""}">${isText ? "내용" : "항목 이름"}은 위 미리보기에서 직접 입력하세요. 글자를 선택한 뒤 상단 메뉴로 색·크기·굵게를 글자별로 지정할 수 있습니다.</p>
+    <p class="wys-set-hint ${isDivider || isAgree ? "hidden" : ""}">${isText ? "내용" : "항목 이름"}은 위 미리보기에서 직접 입력하세요. 글자를 선택한 뒤 상단 메뉴로 색·크기·굵게를 글자별로 지정할 수 있습니다.</p>
     <p class="wys-set-hint ${isDivider ? "" : "hidden"}">가로 구분선을 그립니다. 출력·저장물에도 함께 표시됩니다.</p>
+    <p class="wys-set-hint ${isAgree ? "" : "hidden"}">버튼 문구는 위 미리보기에서 직접 입력하세요. 작성 화면에서 이 버튼을 누르면 같은 서류 안의 모든 동의 항목('동의함' 선택지가 있는 항목)에 '동의함'이 체크됩니다. 출력·저장물에는 버튼이 표시되지 않습니다.</p>
     <div class="s-opt-wrap ${isChoice ? "" : "hidden"}">
       <label class="wys-set-label">선택지 (한 줄에 하나씩)</label>
       <textarea class="s-options box-textarea">${escHtml((f.options || []).join("\n"))}</textarea>
@@ -934,14 +939,15 @@ function efSettingsPanel(f, i) {
       <label class="wys-set-label">유튜브 링크 <span style="color:var(--text-soft); font-weight:400;">— 작성 화면에서만 재생되며, 출력·저장(PDF·JPG)에는 포함되지 않습니다</span></label>
       <input class="s-youtube box-input" value="${escAttr(f.url || "")}" placeholder="예) https://youtu.be/xxxxxxxxxxx" />
     </div>
-    <label class="ef-req ${isText || isDivider || isBody ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
+    <label class="ef-req ${isText || isDivider || isBody || isAgree ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
   `;
 
   // 종류 변경
   panel.querySelector(".s-type").addEventListener("change", (e) => {
     f.type = e.target.value;
-    if (f.type === "section" || f.type === "note" || f.type === "youtube" || f.type === "divider") { delete f.key; delete f.required; }
+    if (f.type === "section" || f.type === "note" || f.type === "youtube" || f.type === "divider" || f.type === "agreeAll") { delete f.key; delete f.required; }
     else if (!f.key) f.key = genId("k");
+    if (f.type === "agreeAll" && !runsToText(fieldRuns(f)).trim()) { f.label = "위 항목에 모두 동의합니다"; delete f.runs; }
     renderEfPreview();
     const np = document.querySelector(`.wys-field[data-i="${i}"] .wys-settings`);
     if (np) np.classList.remove("hidden");

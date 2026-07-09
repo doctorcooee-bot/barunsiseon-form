@@ -155,6 +155,13 @@ function createWritingField(opts) {
     if (sizeEl) sizeEl.style.display = "none";
   }
 
+  // 키보드로 친 글자가 있으면 즉시(동기) 복원한다.
+  //  - 렌더 직후 '다음' 검증에서 빈칸으로 오인되는 것을 막고
+  //  - 텍스트를 계속 편집할 수 있게 이미지로 굳히지 않는다.
+  if (allowType && opts.initialText) {
+    ta.value = numFormat ? formatNumberValue(opts.initialText, numFormat) : opts.initialText;
+  }
+
   const pad = new SignaturePad(canvas, {
     penColor: "#111",
     minWidth: 1.1,
@@ -247,16 +254,12 @@ function createWritingField(opts) {
     wrap.querySelector(".write-smaller").addEventListener("click", () => setBoxHeight(height - STEP));
   }
 
-  // 화면에 붙은 뒤 크기 계산 → 초기값 있으면 복원
+  // 화면에 붙은 뒤 크기 계산 → 초기값 있으면 복원 (텍스트는 위에서 이미 복원됨)
   setTimeout(() => {
     resizeCanvas();
-    if (typeOnly) {                       // 숫자칸: 이전에 친 값(텍스트) 복원
-      if (opts.initialText) {
-        ta.value = numFormat ? formatNumberValue(opts.initialText, numFormat) : opts.initialText;
-      }
-      refreshDisplay();
-      return;
-    }
+    if (typeOnly) { refreshDisplay(); return; }
+    // 키보드로 친 글자가 있으면 손글씨 이미지로 굳히지 않고 '글자'로 계속 편집 가능하게 둔다
+    if (allowType && opts.initialText) { refreshDisplay(); return; }
     if (opts.initial) {
       const img = new Image();
       img.onload = () => {
