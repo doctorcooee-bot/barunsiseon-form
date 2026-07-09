@@ -606,8 +606,8 @@ function efSettingsPanel(f, i) {
       <label class="wys-set-label">표시형식 <span style="color:var(--text-soft); font-weight:400;">— 0 자리에 숫자가 들어가고, 다른 글자는 그대로 표시됩니다. 예) 00kg, 000-0000-0000</span></label>
       <input class="s-format box-input" value="${escAttr(f.format || "")}" placeholder="예) 00kg 또는 000-0000-0000" />
     </div>
-    <div class="s-hint-wrap ${(f.type === "write" || f.type === "writeBig") ? "" : "hidden"}">
-      <label class="wys-set-label">빈칸 안내 문구 <span style="color:var(--text-soft); font-weight:400;">— 손글씨 칸에 옅게 표시되는 문구</span></label>
+    <div class="s-hint-wrap ${(f.type === "write" || f.type === "writeBig" || f.type === "number") ? "" : "hidden"}">
+      <label class="wys-set-label">빈칸 안내 문구 <span style="color:var(--text-soft); font-weight:400;">— 빈칸에 옅게 표시되는 문구</span></label>
       <input class="s-hint box-input" value="${escAttr(f.hint || "")}" placeholder="예) 여기에 손으로 써주세요" />
     </div>
     <label class="ef-req ${isText ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
@@ -659,12 +659,15 @@ function efSettingsPanel(f, i) {
     if (box) box.textContent = f.format ? "표시형식: " + f.format : "숫자 입력 (표시형식 미지정)";
   });
 
-  // 빈칸 안내 문구 — 손글씨(write/writeBig) 항목만
+  // 빈칸 안내 문구 — 손글씨(write/writeBig)·숫자형식(number) 항목
   const hintEl = panel.querySelector(".s-hint");
   if (hintEl) hintEl.addEventListener("input", () => {
     f.hint = hintEl.value;
-    const box = document.querySelector(`.wys-field[data-i="${i}"] .wys-box`);
-    if (box) box.textContent = f.hint || "여기에 손으로 써주세요";
+    // 미리보기 박스는 손글씨 칸에서만 안내문구를 보여준다(숫자칸은 표시형식 미리보기 유지)
+    if (f.type === "write" || f.type === "writeBig") {
+      const box = document.querySelector(`.wys-field[data-i="${i}"] .wys-box`);
+      if (box) box.textContent = f.hint || "여기에 손으로 써주세요";
+    }
   });
 
   // 필수 (실시간, * 표시만 갱신)

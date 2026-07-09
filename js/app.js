@@ -310,7 +310,9 @@ function screenFill() {
       }
       const w = createWritingField({
         height: h,
-        hint: f.type === "signature" ? "여기에 서명해 주세요" : (f.hint || "여기에 손으로 써주세요"),
+        hint: f.type === "signature" ? "여기에 서명해 주세요"
+            : f.type === "number" ? (f.hint || "")
+            : (f.hint || "여기에 손으로 써주세요"),
         dashed: f.type === "signature",
         initial: prev[f.key] || null,
         initialText: prev["__t_" + f.key] || "",
