@@ -541,6 +541,7 @@ function efFieldBlock(f, i) {
     <span class="wys-type">${escHtml(typeName(f.type))}</span>
     <button type="button" data-act="up" title="위로">▲</button>
     <button type="button" data-act="down" title="아래로">▼</button>
+    <button type="button" data-act="add" title="아래에 항목 추가">＋</button>
     <button type="button" data-act="gear" title="자세히 편집">⚙</button>
     <button type="button" data-act="del" title="삭제">✕</button>`;
 
@@ -568,6 +569,16 @@ function efFieldBlock(f, i) {
       e.stopPropagation();
       const act = b.dataset.act;
       if (act === "gear") { settings.classList.toggle("hidden"); return; }
+      if (act === "add") {
+        // 이 항목 바로 아래에 새 항목을 추가하고 선택
+        editingForm.fields.splice(i + 1, 0, { type: "write", key: genId("k"), label: "새 항목" });
+        efSel = i + 1;
+        renderEfPreview();
+        efSyncToolbar();
+        const nf = document.querySelector(`.wys-field[data-i="${efSel}"]`);
+        if (nf) nf.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       if (act === "del") {
         editingForm.fields.splice(i, 1);
         if (efSel === i) efSel = -1; else if (efSel > i) efSel--;
