@@ -214,71 +214,75 @@ function drawMarksFor(ctx, values, fi, boxTop, boxBottom) {
 }
 
 // 서류 한 개의 본문 항목들 그리기 (동의 내용은 제외)
+//  - 출력 공간 절약: 짧은 항목(손글씨 한 줄·숫자)은 좌우 2칸으로 나란히 배치한다.
 async function drawFormBody(ctx, form, values, meta, C) {
   const { doc, font } = ctx;
   const blank = !!meta.blank;   // 빈 서류(종이 출력용): 손글씨 칸을 빈 작성란으로 그림
   const sz = formSizing(form.scale);
   const size = sz.base;
-  const RIGHT = PAGE_W - MARGIN;
+  const FULL = { x: MARGIN, w: CONTENT_W };   // 전체 폭 영역
+  const rightOf = (reg) => reg.x + reg.w;
 
-  // 항목 라벨 (윗줄) — 글자 단위 서식(색·크기·굵기) + 정렬(문장 전체) 반영
-  function drawLabel(f) {
+  // 항목 라벨 (윗줄) — 글자 단위 서식(색·크기·굵기) + 정렬(문장 전체) 반영. reg 영역 안에 그림.
+  function drawLabel(f, reg) {
     ensureSpace(ctx, sz.label + 6);
     drawRichText(ctx, fieldRuns(f), {
       basePt: sz.label, defSize: f.size || 1,
       defColor: hexToPdfColor(f.color, C.gray),
       defBold: !!f.bold,
-      x0: MARGIN, maxW: CONTENT_W,
+      x0: reg.x, maxW: reg.w,
       align: f.align || "left", lineGap: 4.5,
     });
   }
-  // 항목 구분선
+  // 항목 구분선 (항상 전체 폭)
   function sep() {
     ctx.y -= sz.rowGap;
-    ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 6 }, end: { x: RIGHT, y: ctx.y + 6 }, thickness: 0.5, color: C.line });
+    ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 6 }, end: { x: PAGE_W - MARGIN, y: ctx.y + 6 }, thickness: 0.5, color: C.line });
   }
-  // 손글씨 이미지 값
-  async function drawImageValue(dataUrl, maxH) {
+  // 손글씨 이미지 값 (reg 영역 안에)
+  async function drawImageValue(dataUrl, maxH, reg) {
+    const R = rightOf(reg);
     if (blank) {
       // 빈 서류: 손으로 쓸 수 있도록 아래쪽에 밑줄을 둔 빈 영역을 확보
       ensureSpace(ctx, maxH + sz.rowGap);
       ctx.y -= maxH;
-      ctx.page.drawLine({ start: { x: MARGIN + 4, y: ctx.y + 3 }, end: { x: RIGHT, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
+      ctx.page.drawLine({ start: { x: reg.x + 4, y: ctx.y + 3 }, end: { x: R, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
       ctx.y -= sz.rowGap;
       return;
     }
     if (!dataUrl) {
       ensureSpace(ctx, size + 5);
-      ctx.page.drawText("(미작성)", { x: MARGIN + 6, y: ctx.y, size, font, color: C.gray });
+      ctx.page.drawText("(미작성)", { x: reg.x + 6, y: ctx.y, size, font, color: C.gray });
       ctx.y -= size + 5;
       return;
     }
     const img = await doc.embedPng(dataUrlToBytes(dataUrl));
-    const s = Math.min(CONTENT_W / img.width, maxH / img.height);
+    const s = Math.min(reg.w / img.width, maxH / img.height);
     const w = img.width * s, h = img.height * s;
     ensureSpace(ctx, h + sz.rowGap);
-    ctx.page.drawImage(img, { x: MARGIN + 4, y: ctx.y - h + 4, width: w, height: h });
+    ctx.page.drawImage(img, { x: reg.x + 4, y: ctx.y - h + 4, width: w, height: h });
     ctx.y -= h + sz.rowGap;
   }
-  // 텍스트 값 (주소 등) — 여러 줄이면 자동 줄바꿈
-  function drawTextValue(text) {
+  // 텍스트 값 (주소 등) — 여러 줄이면 자동 줄바꿈. reg 영역 안에.
+  function drawTextValue(text, reg) {
+    const R = rightOf(reg);
     if (blank) {
       ensureSpace(ctx, sz.pdfWrite + sz.rowGap);
       ctx.y -= sz.pdfWrite;
-      ctx.page.drawLine({ start: { x: MARGIN + 4, y: ctx.y + 3 }, end: { x: RIGHT, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
+      ctx.page.drawLine({ start: { x: reg.x + 4, y: ctx.y + 3 }, end: { x: R, y: ctx.y + 3 }, thickness: 0.7, color: C.line });
       ctx.y -= sz.rowGap;
       return;
     }
     if (!text) {
       ensureSpace(ctx, size + 5);
-      ctx.page.drawText("(미작성)", { x: MARGIN + 6, y: ctx.y, size, font, color: C.gray });
+      ctx.page.drawText("(미작성)", { x: reg.x + 6, y: ctx.y, size, font, color: C.gray });
       ctx.y -= size + 5;
       return;
     }
     const lh = size + 5;
-    wrapText(text, font, size, CONTENT_W - 8).forEach((ln) => {
+    wrapText(text, font, size, reg.w - 8).forEach((ln) => {
       ensureSpace(ctx, lh);
-      ctx.page.drawText(ln, { x: MARGIN + 6, y: ctx.y, size, font, color: C.text });
+      ctx.page.drawText(ln, { x: reg.x + 6, y: ctx.y, size, font, color: C.text });
       ctx.y -= lh;
     });
     ctx.y -= sz.rowGap - 2;
@@ -289,20 +293,21 @@ async function drawFormBody(ctx, form, values, meta, C) {
     if (typeof v === "string") return v;
     return [v.road, v.detail].filter(Boolean).join(" ");
   }
-  // 선택 항목 → 체크박스 목록 (항목별 글씨 크기·색상 반영)
-  function drawChoices(f, val) {
+  // 선택 항목 → 체크박스 목록 (항목별 글씨 크기·색상 반영). reg 영역 안에.
+  function drawChoices(f, val, reg) {
+    const R = rightOf(reg);
     const selected = Array.isArray(val) ? val : (val ? [val] : []);
     const csize = size * (f.size || 1);         // 선택지 글씨 크기
     const cstep = csize + 9;                     // 선택지 줄 높이
     const ccolor = hexToPdfColor(f.color, C.text);
     const box = Math.round(csize * 0.95);        // 체크박스 크기
     const gap = 6;                              // 박스와 글자 사이 간격
-    let x = MARGIN + 4;
+    let x = reg.x + 4;
     ensureSpace(ctx, cstep);
     f.options.forEach((o) => {
       const tw = font.widthOfTextAtSize(o, csize);
       const itemW = box + gap + tw + 20;
-      if (x + itemW > RIGHT) { ctx.y -= cstep; x = MARGIN + 4; ensureSpace(ctx, cstep); }
+      if (x + itemW > R) { ctx.y -= cstep; x = reg.x + 4; ensureSpace(ctx, cstep); }
       const boxY = ctx.y + csize * 0.34 - box / 2;   // 글자 시각 중심에 박스를 맞춤
       ctx.page.drawRectangle({ x, y: boxY, width: box, height: box, borderColor: C.text, borderWidth: 1, color: C.white });
       if (selected.indexOf(o) >= 0) {
@@ -313,6 +318,42 @@ async function drawFormBody(ctx, form, values, meta, C) {
       x += itemW;
     });
     ctx.y -= cstep - 2;
+  }
+
+  // 항목의 값(라벨 제외)을 reg 영역에 그린다.
+  async function drawFieldValue(f, reg) {
+    if (f.type === "write" || f.type === "writeBig" || f.type === "signature" || f.type === "number") {
+      // 키보드로 친 답변은 텍스트로 그려 밑줄이 바로 아래 오도록 함 (이미지 여백 제거)
+      const typed = values["__t_" + f.key];
+      if (!blank && f.type !== "signature" && typed) drawTextValue(typed, reg);
+      else {
+        const maxH = f.type === "writeBig" ? sz.pdfBig : (f.type === "signature" ? sz.pdfSign : sz.pdfWrite);
+        await drawImageValue(values[f.key], maxH, reg);
+      }
+      return;
+    }
+    if (f.type === "address") { drawTextValue(addrToText(values[f.key]), reg); return; }
+    if (f.type === "radio" || f.type === "checkbox") { drawChoices(f, values[f.key], reg); return; }
+  }
+  // 라벨 + 값을 reg 영역에 그린다 (구분선 제외).
+  async function drawFieldContent(f, reg) {
+    drawLabel(f, reg);
+    await drawFieldValue(f, reg);
+  }
+
+  // 좌우 2칸 배치 대상: 짧은 항목(손글씨 한 줄·숫자)
+  const colGap = 18;
+  const colW = (CONTENT_W - colGap) / 2;
+  function pairable(f) {
+    if (!f || (f.type !== "write" && f.type !== "number")) return false;
+    // 라벨이 3줄 이상이면(너무 길면) 나란히 배치하지 않음
+    if (wrapText(f.label || "", font, sz.label, colW).length > 2) return false;
+    // 채워진 답변이 반칸에서 두 줄 넘게 넘치면 나란히 배치하지 않음(높이 예측 위해)
+    if (!blank) {
+      const typed = values["__t_" + f.key];
+      if (typed && wrapText(typed, font, size, colW - 8).length > 1) return false;
+    }
+    return true;
   }
 
   for (let fi = 0; fi < form.fields.length; fi++) {
@@ -355,31 +396,34 @@ async function drawFormBody(ctx, form, values, meta, C) {
       ctx.y -= 6;
       continue;
     }
-    if (f.type === "write" || f.type === "writeBig" || f.type === "signature" || f.type === "number") {
-      drawLabel(f);
-      // 키보드로 친 답변은 텍스트로 그려 밑줄이 바로 아래 오도록 함 (이미지 여백 제거)
-      const typed = values["__t_" + f.key];
-      if (!blank && f.type !== "signature" && typed) {
-        drawTextValue(typed);
-      } else {
-        const maxH = f.type === "writeBig" ? sz.pdfBig : (f.type === "signature" ? sz.pdfSign : sz.pdfWrite);
-        await drawImageValue(values[f.key], maxH);
-      }
+
+    // 짧은 항목 두 개가 연이어 오면 좌우로 나란히 배치 (출력 공간 절약)
+    const g = form.fields[fi + 1];
+    if (pairable(f) && pairable(g)) {
+      const leftReg = { x: MARGIN, w: colW };
+      const rightReg = { x: MARGIN + colW + colGap, w: colW };
+      const valuePart = Math.max(sz.pdfWrite, size + 5);
+      const reserve = 2 * (sz.label + 4.5) + valuePart + sz.rowGap + 8;
+      ensureSpace(ctx, reserve);         // 두 칸이 한 페이지에 함께 들어가도록 미리 확보
+      const yStart = ctx.y;
+      // 라벨을 각각 그린 뒤, 더 낮은(줄 많은) 라벨 아래에 두 값의 시작을 맞춤
+      drawLabel(f, leftReg);   const lBottom = ctx.y;
+      ctx.y = yStart;
+      drawLabel(g, rightReg);  const rBottom = ctx.y;
+      const valueTop = Math.min(lBottom, rBottom);
+      ctx.y = valueTop;
+      await drawFieldValue(f, leftReg);   const yLeft = ctx.y;
+      ctx.y = valueTop;
+      await drawFieldValue(g, rightReg);  const yRight = ctx.y;
+      ctx.y = Math.min(yLeft, yRight);
       sep();
+      fi += 1;   // 두 항목 소비
       continue;
     }
-    if (f.type === "address") {
-      drawLabel(f);
-      drawTextValue(addrToText(values[f.key]));
-      sep();
-      continue;
-    }
-    if (f.type === "radio" || f.type === "checkbox") {
-      drawLabel(f);
-      drawChoices(f, values[f.key]);
-      sep();
-      continue;
-    }
+
+    // 그 외 항목은 한 줄 전체 폭
+    await drawFieldContent(f, FULL);
+    sep();
   }
 }
 
