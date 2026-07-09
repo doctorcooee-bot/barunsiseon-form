@@ -245,6 +245,78 @@ function applyFieldTextStyle(el, f) {
 }
 
 // -------------------------------------------------------------
+//  인체 그림(아픈 곳 표시) 위젯
+//  - 앞/뒤 그림 위에서 아픈 곳을 누르면 그 자리에 둥근 표시가 생긴다.
+//  - 같은 표시를 다시 누르면 지워진다. (영역을 미리 나누지 않는다)
+//  - 좌표는 그림(반쪽) 뷰박스 기준으로 저장 → PDF에도 같은 위치로 표시.
+// -------------------------------------------------------------
+function createBodyChart(initial) {
+  const IMG = "img/bodychart.png";
+  const R = 30;   // 표시 반지름(뷰박스 단위)
+  const data = { front: [], back: [] };
+  if (initial) {
+    if (Array.isArray(initial.front)) data.front = initial.front.map((m) => ({ x: m.x, y: m.y }));
+    if (Array.isArray(initial.back)) data.back = initial.back.map((m) => ({ x: m.x, y: m.y }));
+  }
+  let lastView = "front";
+
+  const wrap = document.createElement("div");
+  wrap.className = "bodychart";
+  wrap.innerHTML = `
+    <div class="bc-figs">
+      <div class="bc-fig"><div class="bc-cap">앞면</div><svg data-view="front" viewBox="0 0 599 1312"></svg></div>
+      <div class="bc-fig"><div class="bc-cap">뒷면</div><svg data-view="back" viewBox="0 0 600 1312"></svg></div>
+    </div>
+    <div class="bc-tools">
+      <span class="bc-count"></span>
+      <button type="button" class="btn btn-gray bc-undo">되돌리기</button>
+      <button type="button" class="btn btn-gray bc-clear">전체 지우기</button>
+    </div>`;
+
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const el = (n, a) => { const e = document.createElementNS(SVGNS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const svgs = {};
+  wrap.querySelectorAll("svg").forEach((svg) => {
+    const view = svg.dataset.view;
+    svgs[view] = svg;
+    svg.appendChild(el("image", { href: IMG, x: view === "front" ? 0 : -599, y: 0, width: 1199, height: 1312 }));
+    svg.appendChild(el("g", { class: "bc-marks" }));
+    svg.addEventListener("click", (e) => onClick(view, e));
+  });
+
+  function toLocal(svg, evt) {
+    const p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+    return p.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function onClick(view, evt) {
+    const pt = toLocal(svgs[view], evt);
+    const arr = data[view];
+    lastView = view;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (Math.hypot(arr[i].x - pt.x, arr[i].y - pt.y) <= R) { arr.splice(i, 1); render(); return; }
+    }
+    arr.push({ x: Math.round(pt.x), y: Math.round(pt.y) });
+    render();
+  }
+  function render() {
+    ["front", "back"].forEach((v) => {
+      const g = svgs[v].querySelector(".bc-marks"); g.innerHTML = "";
+      data[v].forEach((m) => g.appendChild(el("circle", { cx: m.x, cy: m.y, r: R, class: "bc-mark" })));
+    });
+    wrap.querySelector(".bc-count").textContent = "표시한 곳: " + (data.front.length + data.back.length);
+  }
+  wrap.querySelector(".bc-undo").addEventListener("click", () => {
+    if (data[lastView].length) data[lastView].pop();
+    else { const o = lastView === "front" ? "back" : "front"; if (data[o].length) data[o].pop(); }
+    render();
+  });
+  wrap.querySelector(".bc-clear").addEventListener("click", () => { data.front = []; data.back = []; render(); });
+
+  render();
+  return { el: wrap, data };
+}
+
+// -------------------------------------------------------------
 //  3) 서류 작성 : 선택한 서류를 하나씩 작성
 // -------------------------------------------------------------
 function screenFill() {
@@ -284,6 +356,24 @@ function screenFill() {
       const hr = document.createElement("hr");
       hr.className = "field-divider";
       card.appendChild(hr);
+      return;
+    }
+
+    if (f.type === "bodychart") {
+      const field = document.createElement("div");
+      field.className = "field";
+      if (runsToText(fieldRuns(f)).trim() !== "") {
+        const lbl = document.createElement("label");
+        lbl.className = "field-label";
+        lbl.innerHTML = runsToHtml(fieldRuns(f), f);
+        applyFieldTextStyle(lbl, f);
+        field.appendChild(lbl);
+      }
+      field.dataset.bodychart = f.key;
+      const bc = createBodyChart(prev[f.key]);
+      field._marks = bc.data;   // 작성값 읽기용(같은 객체를 실시간 갱신)
+      field.appendChild(bc.el);
+      card.appendChild(field);
       return;
     }
 
@@ -579,6 +669,11 @@ function readFormValues(form, card, sigRefs) {
       const road = wrap ? wrap.querySelector(".addr-road").value.trim() : "";
       const detail = wrap ? wrap.querySelector(".addr-detail").value.trim() : "";
       out[f.key] = { road, detail };
+      return;
+    }
+    if (f.type === "bodychart") {
+      const wrap = card.querySelector(`[data-bodychart="${f.key}"]`);
+      out[f.key] = wrap && wrap._marks ? wrap._marks : { front: [], back: [] };
       return;
     }
   });

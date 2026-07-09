@@ -172,6 +172,24 @@ html, body {
 .field-divider { border: none; border-top: 1px solid var(--line); margin: 12px 0; }
 .wys-body .wys-divider { height: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 
+/* 인체 그림(아픈 곳 표시) — 작성 화면 */
+.bodychart { margin-top: 8px; }
+.bodychart .bc-figs { display: flex; gap: 12px; flex-wrap: wrap; }
+.bodychart .bc-fig { flex: 1 1 220px; min-width: 200px; }
+.bodychart .bc-cap { text-align: center; font-size: 14px; color: var(--text-soft); margin-bottom: 4px; }
+.bodychart svg {
+  width: 100%; height: auto; display: block; cursor: crosshair;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; touch-action: manipulation;
+}
+.bodychart .bc-mark { fill: rgba(192,57,43,0.35); stroke: var(--danger); stroke-width: 3; }
+.bodychart .bc-tools { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.bodychart .bc-count { flex: 1; font-size: 14px; color: var(--text-soft); }
+
+/* 인체 그림 — 편집기 미리보기 */
+.wys-bodychart { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.wys-bodychart img { height: 120px; width: auto; border: 1px solid var(--line); border-radius: 8px; }
+.wys-bodychart span { font-size: 13px; color: var(--text-soft); }
+
 /* 서류 전체를 덮는 강조 필기 오버레이 */
 .annot-host { position: relative; }
 .annot-overlay { position: absolute; top: 0; left: 0; pointer-events: none; touch-action: auto; z-index: 5; }

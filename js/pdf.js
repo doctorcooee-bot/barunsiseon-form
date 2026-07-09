@@ -57,6 +57,19 @@ function wrapText(text, font, size, maxW) {
   return out;
 }
 
+// 인체 그림(아픈 곳 표시) 원본 PNG — 한 번만 내려받아 재사용
+const BODYCHART_IMG_URL = "img/bodychart.png";
+let _bodyChartBytesPromise = null;
+function getBodyChartBytes() {
+  if (!_bodyChartBytesPromise) {
+    _bodyChartBytesPromise = fetch(BODYCHART_IMG_URL).then((r) => {
+      if (!r.ok) throw new Error("인체 그림을 불러오지 못했습니다 (img/bodychart.png)");
+      return r.arrayBuffer();
+    });
+  }
+  return _bodyChartBytesPromise;
+}
+
 // dataURL(png) → 바이트
 function dataUrlToBytes(dataUrl) {
   const b64 = dataUrl.split(",")[1];
@@ -336,6 +349,32 @@ async function drawFormBody(ctx, form, values, meta, C) {
     await drawFieldValue(f, reg);
   }
 
+  // 인체 그림(아픈 곳 표시) — 그림을 배치하고 표시한 위치에 빨간 원을 그린다.
+  async function drawBodyChart(f, val) {
+    if (!doc.__bcImg) doc.__bcImg = await doc.embedPng(await getBodyChartBytes());
+    const img = doc.__bcImg;
+    const w = CONTENT_W;
+    const h = (w * img.height) / img.width;
+    ensureSpace(ctx, h + sz.rowGap);
+    const topY = ctx.y;
+    ctx.page.drawImage(img, { x: MARGIN, y: topY - h, width: w, height: h });
+    if (!blank && val) {
+      const red = PDFLib.rgb(0.75, 0.22, 0.20);
+      const scale = w / img.width;   // viewBox/이미지 px → PDF pt
+      const r = 30 * scale;
+      const drawMarks = (arr, offX) => {
+        (arr || []).forEach((m) => {
+          const cx = MARGIN + (m.x + offX) * scale;
+          const cy = topY - m.y * scale;
+          ctx.page.drawCircle({ x: cx, y: cy, size: r, color: red, opacity: 0.32, borderColor: red, borderWidth: 1.2, borderOpacity: 0.9 });
+        });
+      };
+      drawMarks(val.front, 0);     // 앞면: 이미지 왼쪽 절반 (offset 0)
+      drawMarks(val.back, 599);    // 뒷면: 이미지 오른쪽 절반 (offset 599)
+    }
+    ctx.y = topY - h - sz.rowGap;
+  }
+
   // 좌우 2칸 배치 대상: 짧은 항목(손글씨 한 줄·숫자)
   const colGap = 18;
   const colW = (CONTENT_W - colGap) / 2;
@@ -360,6 +399,12 @@ async function drawFormBody(ctx, form, values, meta, C) {
       ensureSpace(ctx, 8);
       ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 4 }, end: { x: PAGE_W - MARGIN, y: ctx.y + 4 }, thickness: 0.7, color: C.line });
       ctx.y -= sz.rowGap + 2;
+      continue;
+    }
+    if (f.type === "bodychart") {
+      drawLabel(f, FULL);
+      await drawBodyChart(f, values[f.key]);
+      sep();
       continue;
     }
     if (f.type === "section") {

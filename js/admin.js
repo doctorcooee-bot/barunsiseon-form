@@ -18,6 +18,7 @@ const FIELD_TYPES = [
   { v: "note", t: "안내 문구 (읽기용)" },
   { v: "youtube", t: "유튜브 링크" },
   { v: "divider", t: "구분선" },
+  { v: "bodychart", t: "인체 그림 (아픈 곳 표시)" },
 ];
 function typeName(v) { const f = FIELD_TYPES.find((x) => x.v === v); return f ? f.t : v; }
 
@@ -787,6 +788,7 @@ function efBodyHtml(f) {
   if (f.type === "note") return `<div class="note-text">${ed}</div>`;
   if (f.type === "youtube") return `<div class="note-text yt-desc">${ed}</div>${efYtBoxHtml(f)}`;
   const label = `<label class="field-label">${ed}${req}</label>`;
+  if (f.type === "bodychart") return `${label}<div class="wys-bodychart"><img src="img/bodychart.png" alt="인체 그림" /><span>작성 화면에서 아픈 곳을 눌러 표시합니다</span></div>`;
   if (f.type === "write") return `${label}<div class="wys-box">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
   if (f.type === "writeBig") return `${label}<div class="wys-box tall">${escHtml(f.hint || "여기에 손으로 써주세요")}</div>`;
   if (f.type === "number") return `${label}<div class="wys-box">${escHtml(f.format ? "표시형식: " + f.format : "숫자 입력 (표시형식 미지정)")}</div>`;
@@ -908,6 +910,7 @@ function efSettingsPanel(f, i) {
   const isChoice = f.type === "radio" || f.type === "checkbox";
   const isText = f.type === "section" || f.type === "note" || f.type === "youtube";
   const isDivider = f.type === "divider";
+  const isBody = f.type === "bodychart";
   panel.innerHTML = `
     <label class="wys-set-label">종류</label>
     <select class="s-type box-input">
@@ -931,7 +934,7 @@ function efSettingsPanel(f, i) {
       <label class="wys-set-label">유튜브 링크 <span style="color:var(--text-soft); font-weight:400;">— 작성 화면에서만 재생되며, 출력·저장(PDF·JPG)에는 포함되지 않습니다</span></label>
       <input class="s-youtube box-input" value="${escAttr(f.url || "")}" placeholder="예) https://youtu.be/xxxxxxxxxxx" />
     </div>
-    <label class="ef-req ${isText || isDivider ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
+    <label class="ef-req ${isText || isDivider || isBody ? "hidden" : ""}"><input type="checkbox" class="s-required" ${f.required ? "checked" : ""}/> 필수 항목</label>
   `;
 
   // 종류 변경
