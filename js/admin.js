@@ -765,7 +765,7 @@ function efPlaceholder(f) {
   if (f.type === "note") return "안내 문구 입력";
   if (f.type === "youtube") return "영상 설명 입력 (선택)";
   if (f.type === "agreeAll") return "버튼 문구 입력 (예: 위 항목에 모두 동의합니다)";
-  return "제목 입력 (비우면 출력에서 한 줄 줄어듭니다)";
+  return "제목 입력";
 }
 // 유튜브 항목 미리보기 박스 (썸네일 또는 안내). 설정(⚙)에서 링크 입력.
 function efYtBoxHtml(f) {
@@ -800,7 +800,9 @@ function efBodyHtml(f) {
     const opts = (f.options && f.options.length) ? f.options : ["선택지 1", "선택지 2"];
     const mark = f.type === "radio" ? "○" : "☐";
     // 선택 항목은 제목(텍스트)을 지울 수 있는 X 버튼을 둔다(지우면 출력에서 제목 줄이 사라짐)
-    const clabel = `<label class="field-label">${ed}${req}<button type="button" class="wys-label-del" title="제목 삭제 (출력에서 한 줄 줄임)">✕</button></label>`;
+    //  <label> 안에 <button>(labelable)이 있으면 제목 글자를 눌러도 클릭이 버튼으로 전달돼
+    //  제목이 지워지는 문제가 있어, 감싸는 요소를 <div> 로 둔다.
+    const clabel = `<div class="field-label">${ed}${req}<button type="button" class="wys-label-del" title="제목 삭제 (출력에서 한 줄 줄임)">✕</button></div>`;
     return `${clabel}<div class="choice-group">${opts.map((o) => `<span class="choice">${mark} ${escHtml(o)}</span>`).join("")}</div>`;
   }
   return label;
