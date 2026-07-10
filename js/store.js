@@ -47,10 +47,43 @@ function migrateForms(forms) {
   return forms;
 }
 
+// 배포 후 새로 추가된 기본 서류를, 기존 기기(로컬/클라우드 저장본)에도 한 번만 추가한다.
+//  - 이미 삭제한 서류를 되살리지 않도록, id별 "심음" 표시로 1회만 주입한다.
+//  - 로컬 표시(LS_SEEDED)와 클라우드 설정 안 표시(cfg.seededForms) 두 곳을 함께 사용한다.
+const LS_SEEDED = "barun_seeded_forms_v1";
+const SEED_FORM_IDS = ["jaboHerbConsent"];
+let _seededForms = {};
+try { _seededForms = JSON.parse(localStorage.getItem(LS_SEEDED) || "{}"); } catch (e) { _seededForms = {}; }
+
+// forms 객체에 아직 심지 않은 새 기본 서류를 주입한다. mark 에 심은 기록을 남긴다.
+// 실제로 추가했으면 true 를 반환.
+function injectSeedForms(forms, mark) {
+  let changed = false;
+  SEED_FORM_IDS.forEach((id) => {
+    if (!mark[id] && !forms[id] && DEFAULT_FORMS[id]) {
+      forms[id] = _clone(DEFAULT_FORMS[id]);
+      mark[id] = true;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+function seedNewForms(forms) {
+  if (!forms || typeof forms !== "object") return forms;
+  if (injectSeedForms(forms, _seededForms)) {
+    try {
+      localStorage.setItem(LS_SEEDED, JSON.stringify(_seededForms));
+      localStorage.setItem(LS_FORMS, JSON.stringify(forms));   // 주입한 서류를 기기에 영구 저장
+    } catch (e) { /* 무시 */ }
+  }
+  return forms;
+}
+
 function loadForms() {
   try {
     const s = localStorage.getItem(LS_FORMS);
-    if (s) return migrateForms(JSON.parse(s));
+    if (s) return seedNewForms(migrateForms(JSON.parse(s)));
   } catch (e) { /* 무시 */ }
   return migrateForms(_clone(DEFAULT_FORMS));
 }
@@ -101,7 +134,7 @@ function pushConfigToCloud() {
   if (typeof cloudConfigured !== "function" || !cloudConfigured()) return;
   clearTimeout(_cloudPushTimer);   // 연속 저장을 한 번으로 묶음
   _cloudPushTimer = setTimeout(() => {
-    cloudSaveConfig({ version: 1, forms: FORMS, groups: PATIENT_GROUPS, staffPassword: STAFF_PASSWORD, updatedAt: Date.now() })
+    cloudSaveConfig({ version: 1, forms: FORMS, groups: PATIENT_GROUPS, staffPassword: STAFF_PASSWORD, seededForms: _seededForms, updatedAt: Date.now() })
       .catch((e) => console.warn("설정 클라우드 저장 실패:", e && e.message));
   }, 400);
 }
@@ -115,11 +148,17 @@ async function syncConfigFromCloud() {
       FORMS = migrateForms(cfg.forms);
       if (cfg.groups) PATIENT_GROUPS = cfg.groups;
       if (typeof cfg.staffPassword === "string") STAFF_PASSWORD = cfg.staffPassword;
+      // 새 기본 서류를 클라우드 설정에도 한 번만 주입한다. (클라우드 안 표시 기준)
+      const cloudMark = (cfg.seededForms && typeof cfg.seededForms === "object") ? cfg.seededForms : {};
+      const added = injectSeedForms(FORMS, cloudMark);
+      _seededForms = Object.assign({}, _seededForms, cloudMark);
       try {
         localStorage.setItem(LS_FORMS, JSON.stringify(FORMS));
         localStorage.setItem(LS_GROUPS, JSON.stringify(PATIENT_GROUPS));
+        localStorage.setItem(LS_SEEDED, JSON.stringify(_seededForms));
         if (typeof cfg.staffPassword === "string") localStorage.setItem(LS_STAFF_PW, STAFF_PASSWORD);
       } catch (e) { /* 무시 */ }
+      if (added) pushConfigToCloud();   // 주입한 서류를 클라우드에도 영구 반영
       return true;
     }
   } catch (e) {
