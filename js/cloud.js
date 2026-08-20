@@ -64,7 +64,7 @@ async function cloudUploadOne(file, meta) {
     fileBase64,
     pdfBase64: fileBase64, // 구버전 앱스크립트 호환용
   });
-  return { link: j.link };
+  return { link: j.link, fileId: j.fileId };
 }
 
 // 연결 테스트 (저장하지 않고 응답만 확인)

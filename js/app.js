@@ -23,6 +23,7 @@ function resetState() {
     consentSignImg: null,
     files: [],            // { formName, fileName, blob, url, bytes, mimeType, kind:"pdf"|"jpg" }
     uploadStatus: [],     // files 와 같은 순서
+    uploadedFileIds: [],  // 구글드라이브에 저장된 파일 ID (수정 후 다시 제출하면 이 파일들을 지운다)
   };
 }
 
@@ -920,6 +921,15 @@ async function generateAllPdfs() {
   showLoading("파일을 만들고 있습니다…");
   try {
     await buildFiles();
+    // 수정 후 다시 제출한 경우: 앞서 저장된 파일을 지워 드라이브에 중복이 쌓이지 않게 한다.
+    const oldIds = state.uploadedFileIds || [];
+    if (oldIds.length && cloudConfigured()) {
+      showLoading("이전에 저장된 서류를 정리하는 중…");
+      for (const id of oldIds) {
+        try { await cloudDeleteFile(id); } catch (e) { console.warn("이전 파일 삭제 실패:", e && e.message); }
+      }
+    }
+    state.uploadedFileIds = [];
     clearDraft();
     screenDone();
   } catch (e) {
@@ -945,17 +955,28 @@ function screenDone() {
           ? `<div class="spinner" style="margin:28px auto 0;"></div>`
           : `<div class="done-icon">✓</div>`}
         <h2 class="screen-title" style="margin-top:16px;">${uploading ? "처리중..." : "작성이 완료되었습니다"}</h2>
-        ${uploading ? "" : `<p class="screen-desc" style="font-size:18px; margin-top:10px; line-height:1.6;">${escHtml(state.patientName || "")}님, 감사합니다.<br>직원에게 전달해 주세요.</p>`}
+        ${uploading ? "" : `<p class="screen-desc" style="font-size:18px; margin-top:10px; line-height:1.6;">${escHtml(state.patientName || "")}님, 감사합니다.<br>아래에서 작성한 내용을 확인해 주세요.</p>`}
       </div>
       ${uploading ? "" : `
-      <div style="display:flex; flex-direction:column; gap:12px; max-width:420px; margin:24px auto 0;">
-        ${pdf ? `<button class="btn btn-ghost btn-block" id="btn-view-pdf" style="min-height:58px; font-size:17px;">작성한 서류 확인하기</button>` : ""}
-        <button class="btn btn-ghost btn-block" id="btn-edit" style="min-height:58px; font-size:17px;">내용 수정하기</button>
-        <button class="btn btn-primary btn-block" id="btn-home" style="min-height:58px; font-size:17px;">처음으로</button>
+      ${pdf ? `
+      <div class="card" style="margin-top:18px;">
+        <div style="font-weight:700; margin-bottom:10px;">작성한 서류</div>
+        <div id="done-viewer" class="doc-viewer"></div>
+      </div>` : ""}
+      <div style="display:flex; flex-direction:column; gap:12px; max-width:420px; margin:18px auto 0;">
+        <button class="btn btn-ghost btn-block" id="btn-edit" style="min-height:58px; font-size:17px;">✏️ 고칠 내용이 있어요 (다시 작성)</button>
+        <button class="btn btn-primary btn-block" id="btn-home" style="min-height:58px; font-size:17px;">확인했습니다 · 처음으로</button>
       </div>`}
     `;
     if (!uploading) {
-      if (pdf) document.getElementById("btn-view-pdf").addEventListener("click", () => window.open(pdf.url, "_blank"));
+      if (pdf) {
+        const box = document.getElementById("done-viewer");
+        box.innerHTML = `<div style="color:var(--text-soft);font-size:14px;">문서를 그리는 중…</div>`;
+        renderPdfIntoElement(pdf.bytes, box).catch(() => {
+          box.innerHTML = `<button class="btn btn-ghost btn-block" id="btn-view-pdf">작성한 서류 확인하기</button>`;
+          box.querySelector("#btn-view-pdf").addEventListener("click", () => window.open(pdf.url, "_blank"));
+        });
+      }
       document.getElementById("btn-edit").addEventListener("click", () => {
         state.currentIndex = 0;
         saveDraft();
@@ -1128,6 +1149,7 @@ async function runCloudUpload() {
       try {
         const r = await cloudUploadOne(results[i], meta);
         status[i] = { status: "done", link: r.link };
+        if (r.fileId) state.uploadedFileIds.push(r.fileId);
       } catch (e) {
         status[i] = { status: "error", error: e.message };
       }
@@ -1156,10 +1178,10 @@ function screenSearch() {
     </div>
     <div id="search-results"></div>
     <div class="footer-bar">
-      <button class="btn btn-primary btn-block" id="btn-back">← 직원 메뉴</button>
+      <button class="btn btn-primary btn-block" id="btn-back">${window.VIEWER_ONLY ? "🔒 잠그기" : "← 직원 메뉴"}</button>
     </div>
   `;
-  document.getElementById("btn-back").addEventListener("click", screenStaffMenu);
+  document.getElementById("btn-back").addEventListener("click", window.VIEWER_ONLY ? screenViewerLogin : screenStaffMenu);
 
   if (!cloudConfigured()) {
     document.getElementById("search-results").innerHTML =
@@ -1331,6 +1353,9 @@ function escAttr(s) { return String(s || "").replace(/&/g, "&amp;").replace(/"/g
 
 // ---- 시작 ----
 function init() {
+  // 서류보기 전용 페이지(viewer.html) : 비밀번호 확인 후 "저장된 서류 보기"만 사용
+  if (window.VIEWER_ONLY) return initViewerOnly();
+
   const draft = loadDraft();
   if (draft) screenResume(draft);
   else screenStart();
@@ -1342,6 +1367,20 @@ function init() {
     if (document.querySelector(".select-item.selected")) return;
     screenStart();
   });
+}
+
+// 서류보기 전용 페이지 시작 : 최신 설정(직원 비밀번호 포함)을 받은 뒤 인증 화면
+async function initViewerOnly() {
+  resetState();
+  showLoading("불러오는 중…");
+  try { await syncConfigFromCloud(); } catch (e) { /* 오프라인이면 저장된 비밀번호 사용 */ }
+  hideLoading();
+  screenViewerLogin();
+}
+
+// 인증 → 저장된 서류 보기. 나가기를 누르면 다시 잠긴다.
+function screenViewerLogin() {
+  requireStaff(screenSearch, screenViewerLogin);
 }
 
 // 작성하던 내용이 남아 있으면 "이어서 작성 / 새로 시작"을 먼저 물어본다
