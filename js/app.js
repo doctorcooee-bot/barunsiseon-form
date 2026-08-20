@@ -965,7 +965,10 @@ function screenDone() {
       </div>` : ""}
       <div style="display:flex; flex-direction:column; gap:12px; max-width:420px; margin:18px auto 0;">
         <button class="btn btn-ghost btn-block" id="btn-edit" style="min-height:58px; font-size:17px;">✏️ 고칠 내용이 있어요 (다시 작성)</button>
-        <button class="btn btn-primary btn-block" id="btn-home" style="min-height:58px; font-size:17px;">확인했습니다 · 처음으로</button>
+        <p style="text-align:center; font-size:18px; font-weight:700; line-height:1.6; margin:4px 0 0;">작성된 설문지는 직원에게 전달해주세요.</p>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:28px;">
+        <button class="btn btn-ghost" id="btn-home" style="font-size:15px;">직원 확인</button>
       </div>`}
     `;
     if (!uploading) {
